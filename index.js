@@ -366,7 +366,7 @@ client.on('guildMemberRemove', async (member) => {
     .setThumbnail(member.user.displayAvatarURL({ forceStatic: false }))
     .setTimestamp();
 
-  logChannel.send({ embeds: [embed] });
+  await logChannel.send({ embeds: [embed] });
 });
 
 
@@ -1268,7 +1268,7 @@ client.on('messageCreate', async (message) => {
 
       progress.edit({
         embeds: [infoEmbed('📤 DM All Complete', `✅ Sent: **${sent}**\n❌ Failed: **${failed}** (DMs closed)`)],
-        content: null,
+        content: '',
       });
       break;
     }
@@ -1635,8 +1635,6 @@ client.on('messageCreate', async (message) => {
         return missingPerm(message, 'Manage Server');
 
       const wcfg = getWelcomeSettings(message.guild.id);
-      if (!wcfg.enabled)
-        return message.reply({ embeds: [errorEmbed('Welcome system is currently **disabled**. Enable it in `!welcomeset`.') ] });
       if (!wcfg.channelId)
         return message.reply({ embeds: [errorEmbed('No welcome channel set. Use `!welcomeset` → 📢 Set Channel first.')] });
 
@@ -1748,11 +1746,9 @@ client.on('messageCreate', async (message) => {
       break;
     }
 
-    // ── Unknown command ──────────────────────────────────────────────────────
-    default: {
-      message.reply(`❓ Unknown command. Use \`${PREFIX}help\` to see all commands.`);
+    // ── Unknown command — silently ignore (avoid spamming users) ─────────────
+    default:
       break;
-    }
   }
 });
 
