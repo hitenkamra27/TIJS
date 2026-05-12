@@ -1,3 +1,5 @@
+require('./keep_alive'); // Starts HTTP server so Render detects an open port
+
 const {
   Client,
   GatewayIntentBits,
