@@ -1393,7 +1393,7 @@ client.on('interactionCreate', async (interaction) => {
 
   // Welcome Panel Buttons
   if (!interaction.isButton() && !interaction.isStringSelectMenu()) return;
-  if (!interaction.customId?.startsWith('welcome:') && !interaction.customId?.startsWith('poker:')) return;
+  if (!interaction.customId?.startsWith('welcome:')) return;
   if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild))
     return interaction.reply({embeds:[errorEmbed('Need **Manage Server** permission.')],ephemeral:true});
   const action = interaction.customId.split(':')[1];
@@ -1467,7 +1467,7 @@ client.on('interactionCreate', async (interaction) => {
       g.communityCards = []; g.currentTurn = p.id;
       const handMsg = `✅ <@${p.id}> folded! <@${opp.id}> wins **${winAmt}** chips!\n\n**New Round ${g.round}/10** | Your hole cards (check DMs!)`;
       try { await interaction.user.send(`🃏 **Your hole cards (Round ${g.round}):** ${pokerHandStr(p.hand)}`); } catch{}
-      try { await interaction.guild.members.fetch(opp.id).then(m=>m.user.send(`🃏 **Your hole cards (Round ${g.round}):** ${pokerHandStr(opp.hand)}`)).catch(()=>{}); } catch{}
+      try { await opp.dmSent || interaction.guild.members.fetch(opp.id).then(m=>m.send(`🃏 **Your hole cards (Round ${g.round}):** ${pokerHandStr(opp.hand)}`)).catch(()=>{}); } catch{}
       return interaction.update({embeds:[buildPokerEmbed(g).setDescription(`${handMsg}`)],components:buildPokerActionRows(false)});
     }
 
@@ -1511,7 +1511,7 @@ client.on('interactionCreate', async (interaction) => {
           g.players[0].bet=10; g.players[1].bet=20;
           g.players[0].chips=Math.max(0,g.players[0].chips-10); g.players[1].chips=Math.max(0,g.players[1].chips-20);
           try{await interaction.user.send(`🃏 **Hole cards R${g.round}:** ${pokerHandStr(g.players[0].hand)}`);}catch{}
-          try{await interaction.guild.members.fetch(g.players[1].id).then(m=>m.user.send(`🃏 **Hole cards R${g.round}:** ${pokerHandStr(g.players[1].hand)}`)).catch(()=>{});}catch{}
+          try{await interaction.guild.members.fetch(g.players[1].id).then(m=>m.send(`🃏 **Hole cards R${g.round}:** ${pokerHandStr(g.players[1].hand)}`)).catch(()=>{});}catch{}
           return interaction.update({embeds:[new EmbedBuilder().setColor('#1A472A').setTitle(`🃏 Poker — Round ${g.round}/10`)
             .setDescription(`**Showdown Results:**\n${resultDesc}\n\n**New Round — Community cards:** *Pre-flop*\n<@${g.players[0].id}>: **${g.players[0].chips}** chips | <@${g.players[1].id}>: **${g.players[1].chips}** chips`)
             .setTimestamp()],components:buildPokerActionRows(false)});
@@ -1811,10 +1811,11 @@ client.on('messageCreate', async (message) => {
           .setDescription(`✅ <@${uid}> got it! The word was **${scGame.word}**!\n\n**Final Scores:**\n${scoreboard||'No scores yet.'}`)
           .setTimestamp()]});
       }
+      const prevWord = scGame.word;
       const next=SCRAMBLE_WORDS[Math.floor(Math.random()*SCRAMBLE_WORDS.length)];
       scGame.word=next.word; scGame.hint=next.hint; scGame.scrambled=scrambleWord(next.word);
       return message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🔀 Scramble — Correct! ✅')
-        .setDescription(`✅ <@${uid}> got it! The word was **${scGame.word.toLowerCase()}**!\n\n**Round ${scGame.round}/${scGame.maxRounds}:**\nUnscramble: \`${scGame.scrambled}\`\n💡 Hint: ${scGame.hint}\n\n*Type your answer in chat!*`)
+        .setDescription(`✅ <@${uid}> got it! The word was **${prevWord.toLowerCase()}**!\n\n**Round ${scGame.round}/${scGame.maxRounds}:**\nUnscramble: \`${scGame.scrambled}\`\n💡 Hint: ${scGame.hint}\n\n*Type your answer in chat!*`)
         .setTimestamp()]});
     }
   }
@@ -2061,7 +2062,7 @@ client.on('messageCreate', async (message) => {
       if(!client.warnings[message.guild.id][t.id]) client.warnings[message.guild.id][t.id]=[];
       client.warnings[message.guild.id][t.id].push({reason,mod:message.author.username,ts:new Date().toISOString()});
       const cnt=client.warnings[message.guild.id][t.id].length;
-      try { await t.user.send({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle(`⚠️ Warned in ${message.guild.name}`).setDescription(`**Reason:** ${reason}\n**Warning #${cnt}**`).setTimestamp()]}); } catch{}
+      try { await t.send({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle(`⚠️ Warned in ${message.guild.name}`).setDescription(`**Reason:** ${reason}\n**Warning #${cnt}**`).setTimestamp()]}); } catch{}
       message.reply({embeds:[successEmbed('Warned',`**${t.user.username}** warned (#${cnt}).\n**Reason:** ${reason}`)]});
       break;
     }
@@ -2180,7 +2181,7 @@ client.on('messageCreate', async (message) => {
       const humans=members.filter(m=>!m.user.bot);
       let sent=0,failed=0;
       const prog=await message.reply(`📤 DMing ${humans.size} members...`);
-      for(const[,m]of humans){try{await m.user.send({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`📢 ${message.guild.name}`).setDescription(txt).setTimestamp()]});sent++;}catch{failed++;}await sleep(1000);}
+      for(const[,m]of humans){try{await m.send({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`📢 ${message.guild.name}`).setDescription(txt).setTimestamp()]});sent++;}catch{failed++;}await sleep(1000);}
       prog.edit({embeds:[infoEmbed('DM All Done',`✅ Sent: **${sent}**\n❌ Failed: **${failed}**`)],content:''});
       break;
     }
@@ -2859,7 +2860,7 @@ client.on('messageCreate', async (message) => {
 
       // Send hole cards via DM
       try { await message.author.send(`🃏 **Your hole cards (Round 1):** ${pokerHandStr(p1.hand)}\n_(Keep these secret!)_`); } catch { await message.channel.send(`⚠️ <@${message.author.id}> couldn't receive DM! Enable DMs to see your cards.`); }
-      try { await opp.user.send(`🃏 **Your hole cards (Round 1):** ${pokerHandStr(p2.hand)}\n_(Keep these secret!)_`); } catch { await message.channel.send(`⚠️ <@${opp.id}> couldn't receive DM! Enable DMs to see your cards.`); }
+      try { await opp.send(`🃏 **Your hole cards (Round 1):** ${pokerHandStr(p2.hand)}\n_(Keep these secret!)_`); } catch { await message.channel.send(`⚠️ <@${opp.id}> couldn't receive DM! Enable DMs to see your cards.`); }
 
       await sleep(1000);
       await initMsg.edit({embeds:[buildPokerEmbed(g)], components: buildPokerActionRows(false)});
