@@ -187,7 +187,7 @@ client.on('guildMemberRemove', async (member) => {
   const ch = member.guild.channels.cache.find(c => ['logs','audit-log','mod-log'].includes(c.name));
   if (!ch) return;
   ch.send({ embeds: [new EmbedBuilder().setColor('#ED4245').setTitle('👋 Member Left')
-    .setDescription(`**${member.user.tag || member.user.username}** left the server.`)
+    .setDescription(`**${member.user.username}** left the server.`)
     .setThumbnail(member.user.displayAvatarURL({ forceStatic: false })).setTimestamp()] });
 });
 
@@ -490,9 +490,21 @@ client.on('interactionCreate', async (interaction) => {
   if (action==='reset') { delete welcomeSettings[interaction.guild.id]; const f=getWelcomeSettings(interaction.guild.id); return interaction.update({embeds:[buildWelcomePanel(interaction.guild,f)],components:buildWelcomeRows(f)}); }
 });
 
+// ─── Message Deduplication Guard ─────────────────────────────────────────────
+// Prevents double responses when two bot instances are briefly alive at once
+// (common during Render/Replit redeploys). Tracks processed message IDs for 5s.
+const processedMessages = new Set();
+function isDuplicate(id) {
+  if (processedMessages.has(id)) return true;
+  processedMessages.add(id);
+  setTimeout(() => processedMessages.delete(id), 5000);
+  return false;
+}
+
 // ─── Message Handler ──────────────────────────────────────────────────────────
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
+  if (isDuplicate(message.id)) return;
 
   // Ticket wizard
   const session = setupSessions[message.author.id];
@@ -591,7 +603,7 @@ client.on('messageCreate', async (message) => {
           {name:'🎉 Welcome',    value:`\`welcomeset\` \`welcometest\``},
           {name:'🛠️ Utility',   value:`\`say\` \`embed\` \`poll\``},
           {name:'🎭 Status',     value:`\`addstatus\` \`removestatus\` \`liststatus\` \`clearstatus\``},
-        ).setFooter({text:`${client.user.tag||client.user.username} • All commands use prefix ${PREFIX}`})]});
+        ).setFooter({text:`${client.user.username} • All commands use prefix ${PREFIX}`})]});
       break;
     }
 
@@ -610,7 +622,7 @@ client.on('messageCreate', async (message) => {
       if (!t.kickable) return message.reply('❌ Cannot kick this member.');
       const reason=args.slice(1).join(' ')||'No reason provided';
       await t.kick(reason);
-      message.reply({embeds:[successEmbed('Member Kicked',`**${t.user.tag||t.user.username}** kicked.\n**Reason:** ${reason}`)]});
+      message.reply({embeds:[successEmbed('Member Kicked',`**${t.user.username}** kicked.\n**Reason:** ${reason}`)]});
       break;
     }
 
@@ -622,7 +634,7 @@ client.on('messageCreate', async (message) => {
       if (!t.bannable) return message.reply('❌ Cannot ban this member.');
       const reason=args.slice(1).join(' ')||'No reason provided';
       await t.ban({reason,deleteMessageSeconds:86400});
-      message.reply({embeds:[successEmbed('Member Banned',`**${t.user.tag||t.user.username}** banned.\n**Reason:** ${reason}`)]});
+      message.reply({embeds:[successEmbed('Member Banned',`**${t.user.username}** banned.\n**Reason:** ${reason}`)]});
       break;
     }
 
@@ -643,7 +655,7 @@ client.on('messageCreate', async (message) => {
       let dur=parseDuration(args[1]), reason;
       if(dur){reason=args.slice(2).join(' ')||'No reason';}else{dur=600000;reason=args.slice(1).join(' ')||'No reason';}
       if(dur>28*86400000) return message.reply('❌ Max 28 days.');
-      try { await t.timeout(dur,reason); message.reply({embeds:[successEmbed('Muted',`**${t.user.tag||t.user.username}** timed out for **${formatDuration(dur)}**.\n**Reason:** ${reason}`)]}); }
+      try { await t.timeout(dur,reason); message.reply({embeds:[successEmbed('Muted',`**${t.user.username}** timed out for **${formatDuration(dur)}**.\n**Reason:** ${reason}`)]}); }
       catch(e){ message.reply({embeds:[errorEmbed(e.message)]}); }
       break;
     }
@@ -652,7 +664,7 @@ client.on('messageCreate', async (message) => {
     case 'unmute': case 'untimeout': {
       if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return missingPerm(message,'Moderate Members');
       const t=message.mentions.members.first(); if(!t) return message.reply('❌ Mention a member.');
-      try { await t.timeout(null); message.reply({embeds:[successEmbed('Unmuted',`**${t.user.tag||t.user.username}** timeout removed.`)]}); }
+      try { await t.timeout(null); message.reply({embeds:[successEmbed('Unmuted',`**${t.user.username}** timeout removed.`)]}); }
       catch(e){ message.reply({embeds:[errorEmbed(e.message)]}); }
       break;
     }
@@ -665,10 +677,10 @@ client.on('messageCreate', async (message) => {
       if(!client.warnings) client.warnings={};
       if(!client.warnings[message.guild.id]) client.warnings[message.guild.id]={};
       if(!client.warnings[message.guild.id][t.id]) client.warnings[message.guild.id][t.id]=[];
-      client.warnings[message.guild.id][t.id].push({reason,mod:message.author.tag||message.author.username,ts:new Date().toISOString()});
+      client.warnings[message.guild.id][t.id].push({reason,mod:message.author.username,ts:new Date().toISOString()});
       const cnt=client.warnings[message.guild.id][t.id].length;
       try { await t.send({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle(`⚠️ Warned in ${message.guild.name}`).setDescription(`**Reason:** ${reason}\n**Warning #${cnt}**`).setTimestamp()]}); } catch{}
-      message.reply({embeds:[successEmbed('Warned',`**${t.user.tag||t.user.username}** warned (#${cnt}).\n**Reason:** ${reason}`)]});
+      message.reply({embeds:[successEmbed('Warned',`**${t.user.username}** warned (#${cnt}).\n**Reason:** ${reason}`)]});
       break;
     }
 
@@ -677,8 +689,8 @@ client.on('messageCreate', async (message) => {
       if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return missingPerm(message,'Moderate Members');
       const t=message.mentions.members.first()||message.member;
       const w=client.warnings?.[message.guild.id]?.[t.id];
-      if(!w||!w.length) return message.reply({embeds:[infoEmbed('⚠️ Warnings',`**${t.user.tag||t.user.username}** has no warnings.`)]});
-      message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle(`⚠️ Warnings for ${t.user.tag||t.user.username}`)
+      if(!w||!w.length) return message.reply({embeds:[infoEmbed('⚠️ Warnings',`**${t.user.username}** has no warnings.`)]});
+      message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle(`⚠️ Warnings for ${t.user.username}`)
         .setDescription(w.map((x,i)=>`**#${i+1}** — ${x.reason}\n> by ${x.mod}`).join('\n\n'))
         .setFooter({text:`Total: ${w.length}`}).setTimestamp()]});
       break;
@@ -689,7 +701,7 @@ client.on('messageCreate', async (message) => {
       if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return missingPerm(message,'Administrator');
       const t=message.mentions.members.first(); if(!t) return message.reply('❌ Mention a member.');
       if(client.warnings?.[message.guild.id]?.[t.id]) client.warnings[message.guild.id][t.id]=[];
-      message.reply({embeds:[successEmbed('Cleared',`All warnings for **${t.user.tag||t.user.username}** cleared.`)]});
+      message.reply({embeds:[successEmbed('Cleared',`All warnings for **${t.user.username}** cleared.`)]});
       break;
     }
 
@@ -698,7 +710,7 @@ client.on('messageCreate', async (message) => {
       if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return missingPerm(message,'Manage Channels');
       const s=parseInt(args[0]); if(isNaN(s)||s<0||s>21600) return message.reply('❌ Value must be 0–21600 seconds.');
       await message.channel.setRateLimitPerUser(s);
-      message.reply({embeds:[successEmbed('Slowmode',s===0?'Disabled.`':'Set to **'+s+'s**.')]});
+      message.reply({embeds:[successEmbed('Slowmode',s===0?'Disabled.':'Set to **'+s+'s**.')]});
       break;
     }
 
@@ -742,8 +754,8 @@ client.on('messageCreate', async (message) => {
       const n=parseInt(args[1])||20; if(n<1||n>100) return message.reply('❌ Amount 1–100.');
       const msgs=await message.channel.messages.fetch({limit:100});
       const del=msgs.filter(m=>m.author.id===t.id).toJSON().slice(0,n);
-      if(!del.length) return message.reply(`❌ No messages from **${t.tag||t.username}**.`);
-      try { await message.channel.bulkDelete(del,true); const r=await message.channel.send({embeds:[successEmbed('Deleted',`Deleted **${del.length}** msg(s) from **${t.tag||t.username}**.`)]}); setTimeout(()=>r.delete().catch(()=>{}),4000); }
+      if(!del.length) return message.reply(`❌ No messages from **${t.username}**.`);
+      try { await message.channel.bulkDelete(del,true); const r=await message.channel.send({embeds:[successEmbed('Deleted',`Deleted **${del.length}** msg(s) from **${t.username}**.`)]}); setTimeout(()=>r.delete().catch(()=>{}),4000); }
       catch(e){ message.reply({embeds:[errorEmbed(e.message)]}); }
       break;
     }
@@ -753,8 +765,8 @@ client.on('messageCreate', async (message) => {
       if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return missingPerm(message,'Moderate Members');
       const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention a user.');
       const txt=args.slice(1).join(' '); if(!txt) return message.reply('❌ Provide a message.');
-      try { await t.send({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`📩 From ${message.guild.name}`).setDescription(txt).setFooter({text:`By ${message.author.tag||message.author.username}`}).setTimestamp()]}); message.reply({embeds:[successEmbed('DM Sent',`Sent to **${t.tag||t.username}**.`)]}); }
-      catch { message.reply({embeds:[errorEmbed(`Cannot DM **${t.tag||t.username}**. DMs closed.`)]}); }
+      try { await t.send({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`📩 From ${message.guild.name}`).setDescription(txt).setFooter({text:`By ${message.author.username}`}).setTimestamp()]}); message.reply({embeds:[successEmbed('DM Sent',`Sent to **${t.username}**.`)]}); }
+      catch { message.reply({embeds:[errorEmbed(`Cannot DM **${t.username}**. DMs closed.`)]}); }
       break;
     }
 
@@ -776,7 +788,7 @@ client.on('messageCreate', async (message) => {
       if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) return missingPerm(message,'Manage Server');
       const ch=message.mentions.channels.first(); if(!ch) return message.reply('❌ Mention a channel.');
       const txt=args.slice(1).join(' '); if(!txt) return message.reply('❌ Provide text.');
-      try { await ch.send({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('📢 Announcement').setDescription(txt).setFooter({text:`By ${message.author.tag||message.author.username}`}).setTimestamp()]}); message.reply({embeds:[successEmbed('Sent',`Announcement sent to ${ch}.`)]}); }
+      try { await ch.send({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('📢 Announcement').setDescription(txt).setFooter({text:`By ${message.author.username}`}).setTimestamp()]}); message.reply({embeds:[successEmbed('Sent',`Announcement sent to ${ch}.`)]}); }
       catch { message.reply({embeds:[errorEmbed(`Cannot send to ${ch}.`)]}); }
       break;
     }
@@ -785,7 +797,7 @@ client.on('messageCreate', async (message) => {
     case 'userinfo': case 'whois': {
       const t=message.mentions.members.first()||message.member, u=t.user;
       const roles=t.roles.cache.filter(r=>r.id!==message.guild.id).sort((a,b)=>b.position-a.position).map(r=>r.toString()).slice(0,10).join(', ')||'None';
-      message.reply({embeds:[new EmbedBuilder().setColor(t.displayHexColor||'#5865F2').setTitle(`👤 ${u.tag||u.username}`)
+      message.reply({embeds:[new EmbedBuilder().setColor(t.displayHexColor||'#5865F2').setTitle(`👤 ${u.username}`)
         .setThumbnail(u.displayAvatarURL({forceStatic:false,size:256}))
         .addFields(
           {name:'🆔 ID',          value:u.id,inline:true},
@@ -821,7 +833,7 @@ client.on('messageCreate', async (message) => {
     // ── !botinfo ─────────────────────────────────────────────────────────────
     case 'botinfo': {
       const up=process.uptime(), h=Math.floor(up/3600), m=Math.floor((up%3600)/60), s=Math.floor(up%60);
-      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`🤖 ${client.user.tag||client.user.username}`)
+      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`🤖 ${client.user.username}`)
         .setThumbnail(client.user.displayAvatarURL())
         .addFields(
           {name:'📡 Servers',   value:`${client.guilds.cache.size}`,inline:true},
@@ -837,7 +849,7 @@ client.on('messageCreate', async (message) => {
     // ── !avatar ──────────────────────────────────────────────────────────────
     case 'avatar': case 'pfp': {
       const t=message.mentions.users.first()||message.author;
-      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`🖼️ ${t.tag||t.username}'s Avatar`).setImage(t.displayAvatarURL({forceStatic:false,size:512})).setURL(t.displayAvatarURL({forceStatic:false,size:4096}))]});
+      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`🖼️ ${t.username}'s Avatar`).setImage(t.displayAvatarURL({forceStatic:false,size:512})).setURL(t.displayAvatarURL({forceStatic:false,size:4096}))]});
       break;
     }
 
@@ -868,7 +880,7 @@ client.on('messageCreate', async (message) => {
       if(message.guild.ownerId===u.id) badges.push('👑 Owner');
       const joinedDays=Math.floor((Date.now()-t.joinedTimestamp)/86400000);
       const acctDays=Math.floor((Date.now()-u.createdTimestamp)/86400000);
-      message.reply({embeds:[new EmbedBuilder().setColor(t.displayHexColor||'#5865F2').setTitle(`🪪 ${u.tag||u.username}'s Profile`)
+      message.reply({embeds:[new EmbedBuilder().setColor(t.displayHexColor||'#5865F2').setTitle(`🪪 ${u.username}'s Profile`)
         .setThumbnail(u.displayAvatarURL({forceStatic:false,size:256}))
         .addFields(
           {name:'🆔 User ID',      value:u.id,inline:true},
@@ -879,7 +891,7 @@ client.on('messageCreate', async (message) => {
           {name:'⭐ Top Role',     value:t.roles.highest.toString(),inline:true},
           {name:`🎭 Roles (${t.roles.cache.size-1})`,value:t.roles.cache.filter(r=>r.id!==message.guild.id).sort((a,b)=>b.position-a.position).map(r=>r.toString()).slice(0,8).join(', ')||'None',inline:false},
           {name:'🏅 Badges',       value:badges.join('  ')||'None',inline:false},
-        ).setFooter({text:`Requested by ${message.author.tag||message.author.username}`}).setTimestamp()]});
+        ).setFooter({text:`Requested by ${message.author.username}`}).setTimestamp()]});
       break;
     }
 
@@ -897,14 +909,14 @@ client.on('messageCreate', async (message) => {
       const parts=args.join(' ').split('|');
       if(parts.length<2) return message.reply('❌ Usage: `!embed Title | Description`');
       await message.delete().catch(()=>{});
-      message.channel.send({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(parts[0].trim()).setDescription(parts[1].trim()).setFooter({text:`By ${message.author.tag||message.author.username}`}).setTimestamp()]});
+      message.channel.send({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(parts[0].trim()).setDescription(parts[1].trim()).setFooter({text:`By ${message.author.username}`}).setTimestamp()]});
       break;
     }
 
     // ── !poll ────────────────────────────────────────────────────────────────
     case 'poll': {
       const q=args.join(' '); if(!q) return message.reply('❌ Provide a question.');
-      const poll=await message.channel.send({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('📊 Poll').setDescription(`**${q}**`).setFooter({text:`By ${message.author.tag||message.author.username}`}).setTimestamp()]});
+      const poll=await message.channel.send({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('📊 Poll').setDescription(`**${q}**`).setFooter({text:`By ${message.author.username}`}).setTimestamp()]});
       await poll.react('✅'); await poll.react('❌');
       await message.delete().catch(()=>{});
       break;
@@ -923,7 +935,6 @@ client.on('messageCreate', async (message) => {
     // ── !coinflip ────────────────────────────────────────────────────────────
     case 'coinflip': case 'coin': {
       const result=Math.random()<0.5?'Heads':'Tails';
-      const frames=['🪙','🔄','🪙','🔄','🪙'];
       const coinMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🪙 Coin Flip').setDescription('*Flipping the coin...*  🔄').setTimestamp()]});
       await sleep(400);
       await coinMsg.edit({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🪙 Coin Flip').setDescription('*Still spinning...* 🌀').setTimestamp()]});
@@ -936,17 +947,27 @@ client.on('messageCreate', async (message) => {
 
     case 'meme': {
       const memes=[
-        {t:'When the code works first try 😱',i:'https://media.giphy.com/media/MePaXrG6VGQKWV1qZ5/giphy.gif'},
-        {t:'Me explaining to rubber duck 🦆',i:'https://media.giphy.com/media/QMHoU66sBXqqLqYvGO/giphy.gif'},
-        {t:'Debugging at 3am 😵',i:'https://media.giphy.com/media/o0vwzuFwCGAFO/giphy.gif'},
-        {t:'When someone touches my code 😤',i:'https://media.giphy.com/media/yYSSBtDgbbRzq/giphy.gif'},
-        {t:"It works. Don't touch it 🙏",i:'https://media.giphy.com/media/jquDWJfPUMCiI/giphy.gif'},
-        {t:'Me after fixing one bug 😈',i:'https://media.giphy.com/media/zOvBKUUEERdNm/giphy.gif'},
-        {t:'Stack Overflow to the rescue 🦸',i:'https://media.giphy.com/media/3o7TKr3nzbMDpTGMze/giphy.gif'},
-        {t:'Semicolons be like 🙃',i:'https://media.giphy.com/media/ADiOs8AqeverrAuT4Q/giphy.gif'},
+        {t:'When the code works first try 😱',      i:'https://i.imgur.com/anTxoMB.gif'},
+        {t:'Me explaining to rubber duck 🦆',        i:'https://i.imgur.com/mzHnYsB.gif'},
+        {t:'Debugging at 3am 😵',                   i:'https://i.imgur.com/ToNKiCz.gif'},
+        {t:'When someone touches my code 😤',        i:'https://i.imgur.com/X3NQPKC.gif'},
+        {t:"It works. Don't touch it 🙏",           i:'https://i.imgur.com/JHq4s3D.gif'},
+        {t:'Me after fixing one bug and creating 10 😈', i:'https://i.imgur.com/I8PBKDm.gif'},
+        {t:'Stack Overflow saves the day 🦸',        i:'https://i.imgur.com/kBBMLfg.gif'},
+        {t:'Friday deploy. What could go wrong 💀',  i:'https://i.imgur.com/zHO0jqF.gif'},
       ];
-      const m=memes[Math.floor(Math.random()*memes.length)];
-      message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle(`😂 ${m.t}`).setImage(m.i).setFooter({text:'!meme for another one'}).setTimestamp()]});
+      // Fetch a random programming meme from meme API, fall back to local list
+      try {
+        const res=await fetch('https://meme-api.com/gimme/ProgrammerHumor');
+        const data=await res.json();
+        if(data.url&&!data.nsfw){
+          const title=(`😂 ${data.title}`).slice(0,256);
+          message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle(title).setImage(data.url).setFooter({text:'!meme for another one'}).setTimestamp()]});
+        } else { throw new Error('bad'); }
+      } catch {
+        const m=memes[Math.floor(Math.random()*memes.length)];
+        message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle(`😂 ${m.t}`).setImage(m.i).setFooter({text:'!meme for another one'}).setTimestamp()]});
+      }
       break;
     }
 
@@ -993,36 +1014,54 @@ client.on('messageCreate', async (message) => {
       const t=message.mentions.members.first(); if(!t) return message.reply('❌ Mention someone!');
       const win=Math.random()<0.5?message.member:t, lose=win.id===message.member.id?t:message.member;
       const moves=['a devastating punch','a spinning kick','a power slam','a critical hit','an atomic elbow drop','a suplex'];
-      const fightGifs=['https://media.giphy.com/media/3ohs7HdhQA4ffttVAA/giphy.gif','https://media.giphy.com/media/l4FGAkezBGPBRmNcA/giphy.gif','https://media.giphy.com/media/xT9IgH88DyVxMXLIpq/giphy.gif'];
-      message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('⚔️ Fight!')
-        .setDescription(`**${message.author.username}** vs **${t.user.username}**\n\n🥊 **${win.user.username}** lands ${moves[Math.floor(Math.random()*moves.length)]}!\n\n🏆 **${win.user.username}** wins! **${lose.user.username}** is knocked out! 💀`)
-        .setImage(fightGifs[Math.floor(Math.random()*fightGifs.length)])
-        .setTimestamp()]});
+      try {
+        const res=await fetch('https://nekos.best/api/v2/kick');
+        const gif=(await res.json()).results[0].url;
+        message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('⚔️ Fight!')
+          .setDescription(`**${message.author.username}** vs **${t.user.username}**\n\n🥊 **${win.user.username}** lands ${moves[Math.floor(Math.random()*moves.length)]}!\n\n🏆 **${win.user.username}** wins! **${lose.user.username}** is knocked out! 💀`)
+          .setImage(gif).setTimestamp()]});
+      } catch {
+        message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('⚔️ Fight!')
+          .setDescription(`**${message.author.username}** vs **${t.user.username}**\n\n🥊 **${win.user.username}** lands ${moves[Math.floor(Math.random()*moves.length)]}!\n\n🏆 **${win.user.username}** wins! **${lose.user.username}** is knocked out! 💀`)
+          .setTimestamp()]});
+      }
       break;
     }
 
     case 'slap': {
       const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!');
-      const slapGifs=['https://media.giphy.com/media/Gf3AUz3eBNbTW/giphy.gif','https://media.giphy.com/media/Zql4a8VQPKgmf7ZVNI/giphy.gif','https://media.giphy.com/media/uqSU9IEYEKAbS/giphy.gif'];
-      message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('👋 Slap!').setDescription(`**${message.author.username}** slaps **${t.username}** with a giant trout! 🐟`).setImage(slapGifs[Math.floor(Math.random()*slapGifs.length)]).setTimestamp()]});
+      try {
+        const res=await fetch('https://nekos.best/api/v2/slap');
+        const gif=(await res.json()).results[0].url;
+        message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('👋 Slap!').setDescription(`**${message.author.username}** slaps **${t.username}** with a giant trout! 🐟`).setImage(gif).setTimestamp()]});
+      } catch { message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('👋 Slap!').setDescription(`**${message.author.username}** slaps **${t.username}** with a giant trout! 🐟`).setTimestamp()]}); }
       break;
     }
     case 'hug': {
       const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!');
-      const hugGifs=['https://media.giphy.com/media/od5H3PmEG5EVq/giphy.gif','https://media.giphy.com/media/ZQN9jsRHBdOOmF3CXx/giphy.gif','https://media.giphy.com/media/143v0Z4767T15e/giphy.gif'];
-      message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('🤗 Hug!').setDescription(`**${message.author.username}** gives **${t.username}** a warm hug! 💕`).setImage(hugGifs[Math.floor(Math.random()*hugGifs.length)]).setTimestamp()]});
+      try {
+        const res=await fetch('https://nekos.best/api/v2/hug');
+        const gif=(await res.json()).results[0].url;
+        message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('🤗 Hug!').setDescription(`**${message.author.username}** gives **${t.username}** a warm hug! 💕`).setImage(gif).setTimestamp()]});
+      } catch { message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('🤗 Hug!').setDescription(`**${message.author.username}** gives **${t.username}** a warm hug! 💕`).setTimestamp()]}); }
       break;
     }
     case 'kiss': {
       const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!');
-      const kissGifs=['https://media.giphy.com/media/G3va31oEEnIkM/giphy.gif','https://media.giphy.com/media/bGm9FnBm1fFkk/giphy.gif','https://media.giphy.com/media/mXnO9IiAqiBVK/giphy.gif'];
-      message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('😘 Kiss!').setDescription(`**${message.author.username}** gives **${t.username}** a kiss! 💋`).setImage(kissGifs[Math.floor(Math.random()*kissGifs.length)]).setTimestamp()]});
+      try {
+        const res=await fetch('https://nekos.best/api/v2/kiss');
+        const gif=(await res.json()).results[0].url;
+        message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('😘 Kiss!').setDescription(`**${message.author.username}** gives **${t.username}** a kiss! 💋`).setImage(gif).setTimestamp()]});
+      } catch { message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('😘 Kiss!').setDescription(`**${message.author.username}** gives **${t.username}** a kiss! 💋`).setTimestamp()]}); }
       break;
     }
     case 'pat': {
       const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!');
-      const patGifs=['https://media.giphy.com/media/N0CIxcyPLROBa/giphy.gif','https://media.giphy.com/media/4HP0ddZnNAGqQ/giphy.gif','https://media.giphy.com/media/5tmRHwTlHAA9WkVxTU/giphy.gif'];
-      message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🫳 Pat!').setDescription(`**${message.author.username}** pats **${t.username}** on the head! ✨`).setImage(patGifs[Math.floor(Math.random()*patGifs.length)]).setTimestamp()]});
+      try {
+        const res=await fetch('https://nekos.best/api/v2/pat');
+        const gif=(await res.json()).results[0].url;
+        message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🫳 Pat!').setDescription(`**${message.author.username}** pats **${t.username}** on the head! ✨`).setImage(gif).setTimestamp()]});
+      } catch { message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🫳 Pat!').setDescription(`**${message.author.username}** pats **${t.username}** on the head! ✨`).setTimestamp()]}); }
       break;
     }
 
