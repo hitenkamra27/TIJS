@@ -206,6 +206,10 @@ function getTicketSettings(gid) {
 // ─── Game State ───────────────────────────────────────────────────────────────
 const tttGames = {}, hangmanGames = {}, triviaGames = {}, guessGames = {};
 const bjGames  = {}, slotsCD = {}, minesGames = {}, c4Games = {}, wordleGames = {};
+// New games (batch 1)
+const snakeGames = {}, game2048 = {}, rpsGames = {}, mathDuelGames = {}, wordChainGames = {}, triviaBattleGames = {};
+// New games (batch 2)
+const battleshipGames = {}, memoryGames = {}, holGames = {}, dicePokerGames = {}, scrambleGames = {}, emojiDecodeGames = {};
 
 // ─── TTT Helpers ──────────────────────────────────────────────────────────────
 const TTT_WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
@@ -293,6 +297,384 @@ function buildMinesRows(game, disabled, reveal=false) {
   ));
   return rows;
 }
+
+// ─── Snake Helpers ────────────────────────────────────────────────────────────
+const SNAKE_W = 8, SNAKE_H = 6;
+function makeSnakeGame() {
+  const snake = [{x:3,y:2},{x:2,y:2}];
+  let food; do { food={x:Math.floor(Math.random()*SNAKE_W),y:Math.floor(Math.random()*SNAKE_H)}; }
+  while (snake.some(s=>s.x===food.x&&s.y===food.y));
+  return { snake, food, dir:{x:1,y:0}, score:0, alive:true };
+}
+function renderSnake(g) {
+  const grid=[];
+  for(let y=0;y<SNAKE_H;y++){const row=[];for(let x=0;x<SNAKE_W;x++) row.push('⬛');grid.push(row);}
+  g.snake.forEach((s,i)=>{if(s.y>=0&&s.y<SNAKE_H&&s.x>=0&&s.x<SNAKE_W) grid[s.y][s.x]=i===0?'🟢':'🟩';});
+  if(g.food.y>=0&&g.food.y<SNAKE_H&&g.food.x>=0&&g.food.x<SNAKE_W) grid[g.food.y][g.food.x]='🍎';
+  return grid.map(r=>r.join('')).join('\n');
+}
+function moveSnake(g, dir) {
+  const dirMap={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+  if(dir) g.dir=dirMap[dir];
+  const head={x:g.snake[0].x+g.dir.x,y:g.snake[0].y+g.dir.y};
+  if(head.x<0||head.x>=SNAKE_W||head.y<0||head.y>=SNAKE_H||g.snake.some(s=>s.x===head.x&&s.y===head.y)){g.alive=false;return;}
+  g.snake.unshift(head);
+  if(head.x===g.food.x&&head.y===g.food.y){
+    g.score++;
+    let food; do{ food={x:Math.floor(Math.random()*SNAKE_W),y:Math.floor(Math.random()*SNAKE_H)}; }while(g.snake.some(s=>s.x===food.x&&s.y===food.y));
+    g.food=food;
+  } else g.snake.pop();
+}
+function buildSnakeEmbed(g, uid) {
+  return new EmbedBuilder().setColor(g.alive?'#57F287':'#ED4245').setTitle(`🐍 Snake${g.alive?'':' — Game Over!'}`)
+    .setDescription(`${renderSnake(g)}\n\n**Score:** ${g.score} | **Length:** ${g.snake.length}`)
+    .setFooter({text:g.alive?'Use buttons to move!':'Game over!'}).setTimestamp();
+}
+function buildSnakeRows(disabled) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('snake:noop').setLabel('↖').setStyle(ButtonStyle.Secondary).setDisabled(true),
+      new ButtonBuilder().setCustomId('snake:up').setLabel('⬆️').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+      new ButtonBuilder().setCustomId('snake:noop2').setLabel('↗').setStyle(ButtonStyle.Secondary).setDisabled(true),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('snake:left').setLabel('⬅️').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+      new ButtonBuilder().setCustomId('snake:down').setLabel('⬇️').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+      new ButtonBuilder().setCustomId('snake:right').setLabel('➡️').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('snake:quit').setLabel('🛑 Quit').setStyle(ButtonStyle.Danger).setDisabled(disabled),
+    ),
+  ];
+}
+
+// ─── 2048 Helpers ─────────────────────────────────────────────────────────────
+function make2048Board() {
+  const b=Array.from({length:4},()=>Array(4).fill(0));
+  spawn2048(b); spawn2048(b); return b;
+}
+function spawn2048(b) {
+  const empty=[];
+  for(let r=0;r<4;r++) for(let c=0;c<4;c++) if(!b[r][c]) empty.push([r,c]);
+  if(!empty.length) return;
+  const [r,c]=empty[Math.floor(Math.random()*empty.length)];
+  b[r][c]=Math.random()<0.9?2:4;
+}
+function slide2048Row(row) {
+  let r=row.filter(v=>v); let score=0;
+  for(let i=0;i<r.length-1;i++) if(r[i]===r[i+1]){r[i]*=2;score+=r[i];r.splice(i+1,1);i++;}
+  while(r.length<4) r.push(0);
+  return {row:r,score};
+}
+function move2048(b, dir) {
+  let moved=false, score=0;
+  const nb=b.map(r=>[...r]);
+  const ops={left:()=>{for(let r=0;r<4;r++){const{row,score:s}=slide2048Row(nb[r]);if(row.join()!==nb[r].join())moved=true;nb[r]=row;score+=s;}},
+    right:()=>{for(let r=0;r<4;r++){const rev=[...nb[r]].reverse();const{row,score:s}=slide2048Row(rev);const fin=row.reverse();if(fin.join()!==nb[r].join())moved=true;nb[r]=fin;score+=s;}},
+    up:()=>{for(let c=0;c<4;c++){const col=nb.map(r=>r[c]);const{row,score:s}=slide2048Row(col);if(row.join()!==col.join())moved=true;for(let r=0;r<4;r++)nb[r][c]=row[r];score+=s;}},
+    down:()=>{for(let c=0;c<4;c++){const col=nb.map(r=>r[c]).reverse();const{row,score:s}=slide2048Row(col);const fin=row.reverse();if(fin.join()!==col.reverse().join())moved=true;for(let r=0;r<4;r++)nb[r][c]=fin[r];score+=s;}}
+  };
+  ops[dir]?.();
+  if(moved) spawn2048(nb);
+  return {board:nb,moved,score};
+}
+function render2048(b) {
+  const em={0:'⬛',2:'2️⃣',4:'4️⃣',8:'8️⃣',16:'🔟',32:'🔸',64:'🔶',128:'💛',256:'🟡',512:'🟠',1024:'🔴',2048:'⭐'};
+  return b.map(r=>r.map(v=>em[v]??'🌟').join('')).join('\n');
+}
+function build2048Embed(g) {
+  const best=Math.max(...g.board.flat());
+  return new EmbedBuilder().setColor('#FEE75C').setTitle('🎯 2048')
+    .setDescription(`${render2048(g.board)}\n\n**Score:** ${g.score} | **Best Tile:** ${best}`)
+    .setFooter({text:'Swipe tiles to combine them!'}).setTimestamp();
+}
+function build2048Rows(disabled) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('2048:noop').setLabel(' ').setStyle(ButtonStyle.Secondary).setDisabled(true),
+      new ButtonBuilder().setCustomId('2048:up').setLabel('⬆️').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+      new ButtonBuilder().setCustomId('2048:noop2').setLabel(' ').setStyle(ButtonStyle.Secondary).setDisabled(true),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('2048:left').setLabel('⬅️').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+      new ButtonBuilder().setCustomId('2048:down').setLabel('⬇️').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+      new ButtonBuilder().setCustomId('2048:right').setLabel('➡️').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+    ),
+  ];
+}
+
+// ─── RPS Tournament Helpers ───────────────────────────────────────────────────
+const RPS_EMOJI={rock:'🪨',paper:'📄',scissors:'✂️'};
+const RPS_BEATS={rock:'scissors',scissors:'paper',paper:'rock'};
+function buildRPSLobbyEmbed(g) {
+  return new EmbedBuilder().setColor('#FEE75C').setTitle('🎮 Rock Paper Scissors — Multiplayer')
+    .setDescription(`**Best of ${g.bestOf}** | Round **${g.round}/${g.bestOf}**\n\n<@${g.p1}> ${g.score1} — ${g.score2} <@${g.p2}>\n\n*Waiting for both players to pick...*\n${g.choice1?`✅ <@${g.p1}> has chosen`:'⏳ <@'+g.p1+'> thinking...'}\n${g.choice2?`✅ <@${g.p2}> has chosen`:'⏳ <@'+g.p2+'> thinking...'}`)
+    .setTimestamp();
+}
+function buildRPSRows(disabled) {
+  return [new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('rps:rock').setLabel('🪨 Rock').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+    new ButtonBuilder().setCustomId('rps:paper').setLabel('📄 Paper').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+    new ButtonBuilder().setCustomId('rps:scissors').setLabel('✂️ Scissors').setStyle(ButtonStyle.Danger).setDisabled(disabled),
+  )];
+}
+
+// ─── Math Duel Helpers ────────────────────────────────────────────────────────
+function genMathQ(diff) {
+  if(diff===1){const a=Math.floor(Math.random()*20)+1,b=Math.floor(Math.random()*20)+1;return{q:`${a} + ${b}`,a:a+b};}
+  if(diff===2){const a=Math.floor(Math.random()*12)+2,b=Math.floor(Math.random()*12)+2;return{q:`${a} × ${b}`,a:a*b};}
+  const a=Math.floor(Math.random()*30)+5,b=Math.floor(Math.random()*30)+5;return{q:`${a} × ${b} - ${Math.floor(a/2)}`,a:a*b-Math.floor(a/2)};
+}
+function buildMathEmbed(g) {
+  const bar = (n,max) => n===0?'░░░░░░░░░░':'█'.repeat(Math.round(n/max*10))+'░'.repeat(10-Math.round(n/max*10));
+  return new EmbedBuilder().setColor('#5865F2').setTitle('🧮 Math Duel')
+    .setDescription(`**Question ${g.qNum}/5** (Diff: ${'⭐'.repeat(g.diff)})\n\n> 🔢 **${g.current.q} = ?**\n\nType your answer in chat — fastest correct answer wins the point!\n\n<@${g.p1}> \`${bar(g.score1,5)}\` ${g.score1}pts\n<@${g.p2}> \`${bar(g.score2,5)}\` ${g.score2}pts`)
+    .setFooter({text:`⏱️ 15 seconds per question`}).setTimestamp();
+}
+
+// ─── Word Chain Helpers ───────────────────────────────────────────────────────
+function buildWordChainEmbed(g) {
+  const chain=g.chain.slice(-5).join(' → ');
+  return new EmbedBuilder().setColor('#9B59B6').setTitle('🔗 Word Chain')
+    .setDescription(`**Chain:** ${chain||'*Starting soon...*'}\n\n**Last word ends in:** \`${g.lastLetter.toUpperCase()}\`\n\n<@${g.currentTurn}>'s turn! Type a word starting with **${g.lastLetter.toUpperCase()}**`)
+    .addFields(
+      {name:'<@'+g.p1+'> Lives',value:'❤️'.repeat(g.lives1||3)+'🖤'.repeat(3-(g.lives1||3)),inline:true},
+      {name:'<@'+g.p2+'> Lives',value:'❤️'.repeat(g.lives2||3)+'🖤'.repeat(3-(g.lives2||3)),inline:true},
+    ).setFooter({text:'15 seconds to answer • Used words cannot repeat'}).setTimestamp();
+}
+
+// ─── Trivia Battle Helpers ────────────────────────────────────────────────────
+const TRIVIA_BATTLE_Q = [
+  {q:'What is 7 × 8?', a:'56', choices:['48','56','64','72']},
+  {q:'Which planet has rings?', a:'Saturn', choices:['Jupiter','Saturn','Uranus','Neptune']},
+  {q:'Capital of Japan?', a:'Tokyo', choices:['Osaka','Kyoto','Tokyo','Hiroshima']},
+  {q:'Largest mammal?', a:'Blue Whale', choices:['Elephant','Giraffe','Blue Whale','Hippo']},
+  {q:'H2O is?', a:'Water', choices:['Hydrogen','Oxygen','Water','Salt']},
+  {q:'Speed of light (approx)?', a:'300,000 km/s', choices:['150,000 km/s','300,000 km/s','450,000 km/s','600,000 km/s']},
+  {q:'Who invented the telephone?', a:'Bell', choices:['Edison','Bell','Tesla','Marconi']},
+  {q:'First element in periodic table?', a:'Hydrogen', choices:['Helium','Oxygen','Hydrogen','Carbon']},
+  {q:'Largest continent?', a:'Asia', choices:['Africa','Asia','Europe','America']},
+  {q:'Number of bones in adult body?', a:'206', choices:['196','206','216','226']},
+];
+function buildTriviaBattleEmbed(g) {
+  const q=g.questions[g.qNum];
+  const bar = n => '█'.repeat(n)+'░'.repeat(5-n);
+  return new EmbedBuilder().setColor('#E67E22').setTitle(`⚡ Trivia Battle — Q${g.qNum+1}/${g.questions.length}`)
+    .setDescription(`**${q.q}**\n\nA) ${q.choices[0]}\nB) ${q.choices[1]}\nC) ${q.choices[2]}\nD) ${q.choices[3]}\n\n<@${g.p1}> \`[${bar(g.score1)}]\` ${g.score1}pts\n<@${g.p2}> \`[${bar(g.score2)}]\` ${g.score2}pts`)
+    .setFooter({text:'Both players answer! First correct wins the point!'}).setTimestamp();
+}
+function buildTriviaBattleRows(disabled) {
+  return [new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('tb:0').setLabel('A').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+    new ButtonBuilder().setCustomId('tb:1').setLabel('B').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+    new ButtonBuilder().setCustomId('tb:2').setLabel('C').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+    new ButtonBuilder().setCustomId('tb:3').setLabel('D').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+  )];
+}
+
+// ─── Battleship Helpers ───────────────────────────────────────────────────────
+const BS_SIZE = 5;
+const BS_SHIPS = [{name:'Carrier',len:3},{name:'Destroyer',len:2},{name:'Sub',len:1},{name:'Sub2',len:1}]; // total 7 cells on 5x5
+function makeBSBoard() { return Array.from({length:BS_SIZE},()=>Array(BS_SIZE).fill(0)); }
+function placeBSShips(board) {
+  const ships=[];
+  for(const ship of BS_SHIPS){
+    let placed=false;
+    while(!placed){
+      const horiz=Math.random()<0.5;
+      const r=Math.floor(Math.random()*(BS_SIZE-(horiz?0:ship.len)));
+      const c=Math.floor(Math.random()*(BS_SIZE-(horiz?ship.len:0)));
+      const cells=[];
+      let ok=true;
+      for(let i=0;i<ship.len;i++){
+        const sr=r+(horiz?0:i), sc=c+(horiz?i:0);
+        if(board[sr][sc]!==0){ok=false;break;}
+        cells.push([sr,sc]);
+      }
+      if(ok){cells.forEach(([sr,sc])=>{board[sr][sc]=1;});ships.push({name:ship.name,cells,hits:0,len:ship.len});placed=true;}
+    }
+  }
+  return ships;
+}
+function renderBSGrid(board, shots, showShips=false) {
+  const COLS='ABCDE';
+  let out='`  A B C D E`\n';
+  for(let r=0;r<BS_SIZE;r++){
+    let row=`\`${r+1} `;
+    for(let c=0;c<BS_SIZE;c++){
+      const hit=shots.some(s=>s[0]===r&&s[1]===c);
+      if(hit){ row+=board[r][c]===1?'💥':'〰'; }
+      else if(showShips&&board[r][c]===1){ row+='🚢'; }
+      else { row+='🟦'; }
+    }
+    out+=row+'`\n';
+  }
+  return out;
+}
+function parseBSCoord(str) {
+  const m=str.trim().toUpperCase().match(/^([A-E])([1-5])$/);
+  if(!m) return null;
+  return [parseInt(m[2])-1,'ABCDE'.indexOf(m[1])];
+}
+function buildBSEmbed(g, whose='your') {
+  const opp=whose==='your'?g.p2:g.p1;
+  const board=whose==='your'?g.board2:g.board1;
+  const shots=whose==='your'?g.shots1:g.shots2;
+  const ships=whose==='your'?g.ships2:g.ships1;
+  const sunk=ships.filter(s=>s.hits>=s.len).length;
+  return new EmbedBuilder().setColor('#3498DB').setTitle(`🚢 Battleship — <@${g.currentTurn}>'s Turn`)
+    .setDescription(`**Your Attack Grid** (targeting <@${opp}>)\n${renderBSGrid(board,shots)}\n💥 Hits shown | 〰 Miss | 🟦 Unknown\n\n**Ships sunk:** ${sunk}/${ships.length} | Type a coordinate like \`A1\`, \`C3\`, \`E5\``)
+    .setTimestamp();
+}
+
+// ─── Memory Match Helpers ─────────────────────────────────────────────────────
+const MEM_EMOJIS = ['🍎','🍊','🍋','🍇','🍓','🎯','⭐','🔥','💎','🎸','🌈','🦋'];
+function makeMemoryGame() {
+  const pairs=[...MEM_EMOJIS.slice(0,6),...MEM_EMOJIS.slice(0,6)];
+  for(let i=pairs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pairs[i],pairs[j]]=[pairs[j],pairs[i]];}
+  return {cards:pairs,flipped:Array(12).fill(false),matched:Array(12).fill(false),first:null,score:0,moves:0};
+}
+function renderMemory(g) {
+  let out='';
+  for(let i=0;i<12;i++){
+    out+=(g.flipped[i]||g.matched[i])?g.cards[i]:'🟦';
+    if((i+1)%4===0) out+='\n';
+  }
+  return out;
+}
+function buildMemoryRows(g,disabled) {
+  const rows=[];
+  for(let r=0;r<3;r++){
+    const row=new ActionRowBuilder();
+    for(let c=0;c<4;c++){
+      const i=r*4+c;
+      row.addComponents(new ButtonBuilder().setCustomId(`mem:${i}`).setLabel(`${i+1}`).setStyle(g.matched[i]?ButtonStyle.Success:g.flipped[i]?ButtonStyle.Primary:ButtonStyle.Secondary).setDisabled(disabled||g.matched[i]||g.flipped[i]));
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+// ─── Higher or Lower Helpers ──────────────────────────────────────────────────
+const HOL_ITEMS = [
+  {name:'Mount Everest Height',val:8849,unit:'m'},
+  {name:'Speed of Sound',val:343,unit:'m/s'},
+  {name:'Days in a Leap Year',val:366,unit:'days'},
+  {name:'Human Body Temperature',val:37,unit:'°C'},
+  {name:'FIFA World Cup Teams (2026)',val:48,unit:'teams'},
+  {name:'Average Human Heartbeats/min',val:72,unit:'bpm'},
+  {name:'Layers of Earth',val:4,unit:'layers'},
+  {name:'Bones in Human Hand',val:27,unit:'bones'},
+  {name:'Teeth in Adult Human',val:32,unit:'teeth'},
+  {name:'Planets in Solar System',val:8,unit:'planets'},
+  {name:'Countries in Africa',val:54,unit:'countries'},
+  {name:'Letters in English Alphabet',val:26,unit:'letters'},
+  {name:'Days in February (non-leap)',val:28,unit:'days'},
+  {name:'Legs on a Spider',val:8,unit:'legs'},
+  {name:'Sides of a Hexagon',val:6,unit:'sides'},
+  {name:'Floors in Burj Khalifa',val:163,unit:'floors'},
+  {name:'Olympic Rings',val:5,unit:'rings'},
+  {name:'Miles in a Marathon',val:26,unit:'miles'},
+  {name:'Ribs in a Human',val:24,unit:'ribs'},
+  {name:'Seconds in an Hour',val:3600,unit:'seconds'},
+];
+function buildHOLEmbed(g) {
+  const cur=g.items[g.idx];
+  const prev=g.idx>0?g.items[g.idx-1]:null;
+  return new EmbedBuilder().setColor('#1ABC9C').setTitle('📊 Higher or Lower')
+    .setDescription(
+      (prev?`**Previous:** ${prev.name}\n> **${prev.val} ${prev.unit}**\n\n`:'') +
+      `**Current:** ${cur.name}\n> **${g.idx===0?`${cur.val} ${cur.unit}`:'??? ' +cur.unit}**\n\n` +
+      `Is it **Higher** or **Lower** than ${prev?`${prev.val} ${prev.unit}`:'the previous'}?\n\n` +
+      `⭐ **Streak:** ${g.streak} | 🏆 **Best:** ${g.best}`
+    ).setFooter({text:'Click a button to guess!'}).setTimestamp();
+}
+function buildHOLRows(disabled) {
+  return [new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('hol:higher').setLabel('📈 Higher').setStyle(ButtonStyle.Success).setDisabled(disabled),
+    new ButtonBuilder().setCustomId('hol:lower').setLabel('📉 Lower').setStyle(ButtonStyle.Danger).setDisabled(disabled),
+    new ButtonBuilder().setCustomId('hol:quit').setLabel('🛑 Quit').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+  )];
+}
+
+// ─── Dice Poker Helpers ───────────────────────────────────────────────────────
+function rollDice(n=5) { return Array.from({length:n},()=>Math.floor(Math.random()*6)+1); }
+function diceFace(n) { return ['','⚀','⚁','⚂','⚃','⚄','⚅'][n]; }
+function evalDiceHand(dice) {
+  const counts={};
+  dice.forEach(d=>{counts[d]=(counts[d]||0)+1;});
+  const vals=Object.values(counts).sort((a,b)=>b-a);
+  const sorted=[...new Set(dice)].sort((a,b)=>a-b);
+  const isStr=sorted.length===5&&sorted[4]-sorted[0]===4;
+  if(vals[0]===5) return {rank:8,name:'🎰 Five of a Kind!'};
+  if(isStr&&dice.includes(6)) return {rank:7,name:'👑 Royal Straight!'};
+  if(isStr) return {rank:6,name:'🔀 Straight!'};
+  if(vals[0]===4) return {rank:5,name:'4️⃣ Four of a Kind!'};
+  if(vals[0]===3&&vals[1]===2) return {rank:4,name:'🏠 Full House!'};
+  if(vals[0]===3) return {rank:3,name:'3️⃣ Three of a Kind!'};
+  if(vals[0]===2&&vals[1]===2) return {rank:2,name:'👥 Two Pair!'};
+  if(vals[0]===2) return {rank:1,name:'👤 One Pair!'};
+  return {rank:0,name:'💨 High Card'};
+}
+function buildDPEmbed(g, phase) {
+  const diceStr=g.dice.map((d,i)=>g.held[i]?`[${diceFace(d)}]`:diceFace(d)).join(' ');
+  const hand=evalDiceHand(g.dice);
+  return new EmbedBuilder().setColor('#E74C3C').setTitle('🎲 Dice Poker')
+    .setDescription(`**Your Dice:**\n${diceStr}\n\n**Hand:** ${hand.name}\n\n${phase==='hold'?`Hold dice you want to keep, then click **Roll!** (${g.rerolls} reroll${g.rerolls!==1?'s':''} left)`:`**Bet:** ${g.bet} coins\n\nResult: ${hand.rank>=3?`🏆 Win! +${g.bet*hand.rank} coins`:hand.rank>=1?`↩️ Push — coins back`:hand.rank===0?`😞 Loss — -${g.bet} coins`:''}`}`)
+    .setTimestamp();
+}
+function buildDPHoldRows(dice,held,disabled) {
+  const row1=new ActionRowBuilder();
+  dice.forEach((_,i)=>row1.addComponents(new ButtonBuilder().setCustomId(`dp:hold:${i}`).setLabel(`${held[i]?'✅':'⬜'} Die ${i+1}`).setStyle(held[i]?ButtonStyle.Success:ButtonStyle.Secondary).setDisabled(disabled)));
+  const row2=new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('dp:roll').setLabel('🎲 Roll!').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+  );
+  return [row1,row2];
+}
+
+// ─── Scramble Helpers ─────────────────────────────────────────────────────────
+const SCRAMBLE_WORDS = [
+  {word:'PYTHON',hint:'A programming language 🐍'},
+  {word:'DISCORD',hint:'A chat platform 💬'},
+  {word:'KEYBOARD',hint:'You type on this ⌨️'},
+  {word:'ELEPHANT',hint:'Biggest land animal 🐘'},
+  {word:'DIAMOND',hint:'Hardest natural material 💎'},
+  {word:'VAMPIRE',hint:'Drinks blood 🧛'},
+  {word:'RAINBOW',hint:'Appears after rain 🌈'},
+  {word:'THUNDER',hint:'Loud sky sound ⚡'},
+  {word:'CAPTAIN',hint:'Leader of a ship 🚢'},
+  {word:'JUNGLE',hint:'Dense tropical forest 🌿'},
+  {word:'WIZARD',hint:'Uses magic spells 🧙'},
+  {word:'PLANET',hint:'Orbits a star 🪐'},
+  {word:'ROCKET',hint:'Goes to space 🚀'},
+  {word:'CASTLE',hint:'Medieval fortress 🏰'},
+  {word:'PIRATE',hint:'Sails the seas 🏴‍☠️'},
+];
+function scrambleWord(word) {
+  const arr=word.split('');
+  let s;
+  do { for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];} s=arr.join(''); } while(s===word);
+  return s;
+}
+
+// ─── Emoji Decode Helpers ─────────────────────────────────────────────────────
+const EMOJI_PUZZLES = [
+  {emojis:'🐟🍕',answer:'fishpizza',display:'Fish Pizza',hint:'A food combo 🍕'},
+  {emojis:'🌙🌟',answer:'moonstar',display:'Moon Star',hint:'Night sky things 🌙'},
+  {emojis:'🔥💧',answer:'firewater',display:'Fire Water',hint:'Opposites ⚡'},
+  {emojis:'🐻🏫',answer:'bearschool',display:'Bear School',hint:'Animal education 📚'},
+  {emojis:'🌊🏄',answer:'surfwave',display:'Surf Wave',hint:'Beach sport 🏄'},
+  {emojis:'🦁👑',answer:'lionking',display:'Lion King',hint:'Famous movie! 🎬'},
+  {emojis:'❄️⛄',answer:'snowman',display:'Snow Man',hint:'Winter figure ⛄'},
+  {emojis:'🐸🎤',answer:'frogmicrophone',display:'Frog Microphone',hint:'Singing amphibian 🎤'},
+  {emojis:'🌹💀',answer:'rosebone',display:'Rose Bone',hint:'Beauty and death 💀'},
+  {emojis:'🎸⚡',answer:'rockelectricity',display:'Rock Electricity',hint:'Electric rock ⚡'},
+  {emojis:'🐉🔥',answer:'dragonfire',display:'Dragon Fire',hint:'Fantasy creature ⚔️'},
+  {emojis:'🌻☀️',answer:'sunflowersun',display:'Sunflower Sun',hint:'Bright things 🌻'},
+  {emojis:'👻🏠',answer:'ghosthouse',display:'Ghost House',hint:'Haunted! 👻'},
+  {emojis:'🐧❄️',answer:'penguinice',display:'Penguin Ice',hint:'Antarctic bird 🐧'},
+  {emojis:'🦊🌲',answer:'foxforest',display:'Fox Forest',hint:'Wild animal habitat 🌲'},
+];
 
 // ─── Hangman Data ─────────────────────────────────────────────────────────────
 const HM_WORDS = ['javascript','discord','programming','keyboard','elephant','midnight','rainbow','adventure','telescope','butterfly','champion','universe','developer','algorithm','database'];
@@ -451,6 +833,198 @@ client.on('interactionCreate', async (interaction) => {
     }
   }
 
+  // Snake
+  if (interaction.isButton() && interaction.customId.startsWith('snake:')) {
+    const action = interaction.customId.split(':')[1];
+    const game = snakeGames[interaction.user.id];
+    if (!game) return interaction.reply({content:'❌ No snake game. Use `!snake` to start.',ephemeral:true});
+    if (interaction.user.id !== game.userId) return interaction.reply({content:'❌ Not your game!',ephemeral:true});
+    if (!game.alive) return interaction.update({embeds:[buildSnakeEmbed(game,game.userId)],components:buildSnakeRows(true)});
+    if (action==='quit') { game.alive=false; delete snakeGames[interaction.user.id]; return interaction.update({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🐍 Snake — Quit').setDescription(`${renderSnake(game)}\n\n**Final Score:** ${game.score}`).setTimestamp()],components:[]}); }
+    if (action==='noop'||action==='noop2') return interaction.reply({content:'⬛',ephemeral:true});
+    const opposite={up:'down',down:'up',left:'right',right:'left'};
+    const curDir=Object.keys({up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}}).find(k=>{const dm={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};return dm[k].x===game.dir.x&&dm[k].y===game.dir.y;});
+    if (action===opposite[curDir]) return interaction.reply({content:"❌ Can't reverse direction!",ephemeral:true});
+    moveSnake(game, action);
+    if (!game.alive) { delete snakeGames[interaction.user.id]; return interaction.update({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🐍 Snake — Game Over! 💀').setDescription(`${renderSnake(game)}\n\n**Final Score:** ${game.score} | **Length:** ${game.snake.length}\n\n${game.score>=10?'🏆 Amazing!':game.score>=5?'😎 Good run!':'💪 Keep practicing!'}`).setTimestamp()],components:[]}); }
+    return interaction.update({embeds:[buildSnakeEmbed(game,game.userId)],components:buildSnakeRows(false)});
+  }
+
+  // 2048
+  if (interaction.isButton() && interaction.customId.startsWith('2048:')) {
+    const action = interaction.customId.split(':')[1];
+    const game = game2048[interaction.user.id];
+    if (!game) return interaction.reply({content:'❌ No 2048 game. Use `!2048` to start.',ephemeral:true});
+    if (interaction.user.id !== game.userId) return interaction.reply({content:'❌ Not your game!',ephemeral:true});
+    if (action==='noop'||action==='noop2') return interaction.reply({content:'⬛',ephemeral:true});
+    const {board,moved,score} = move2048(game.board, action);
+    game.board=board; game.score+=score;
+    const best=Math.max(...board.flat());
+    const hasMove = ['up','down','left','right'].some(d=>move2048(board,d).moved);
+    if (best>=2048) {
+      delete game2048[interaction.user.id];
+      return interaction.update({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🎯 2048 — YOU WIN! 🏆').setDescription(`${render2048(board)}\n\n**Score:** ${game.score}\n\n🌟 **You reached 2048!**`).setTimestamp()],components:[]});
+    }
+    if (!hasMove) {
+      delete game2048[interaction.user.id];
+      return interaction.update({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🎯 2048 — Game Over!').setDescription(`${render2048(board)}\n\n**Final Score:** ${game.score}\n\n${game.score>=1000?'👏 Great score!':'💪 Try again!'}`).setTimestamp()],components:[]});
+    }
+    if (!moved) return interaction.reply({content:'❌ Can\'t move that way!',ephemeral:true});
+    return interaction.update({embeds:[build2048Embed(game)],components:build2048Rows(false)});
+  }
+
+  // RPS Multiplayer
+  if (interaction.isButton() && interaction.customId.startsWith('rps:')) {
+    const choice = interaction.customId.split(':')[1];
+    const game = rpsGames[interaction.channel.id];
+    if (!game) return interaction.reply({content:'❌ No RPS game here.',ephemeral:true});
+    const uid = interaction.user.id;
+    if (uid!==game.p1&&uid!==game.p2) return interaction.reply({content:'❌ You are not in this game.',ephemeral:true});
+    if (uid===game.p1&&game.choice1) return interaction.reply({content:'✅ Already picked!',ephemeral:true});
+    if (uid===game.p2&&game.choice2) return interaction.reply({content:'✅ Already picked!',ephemeral:true});
+    if (uid===game.p1) game.choice1=choice; else game.choice2=choice;
+    if (!game.choice1||!game.choice2) return interaction.update({embeds:[buildRPSLobbyEmbed(game)],components:buildRPSRows(false)});
+    // Both chose — resolve
+    const c1=game.choice1, c2=game.choice2;
+    let roundWinner=null;
+    if (c1===c2) { /* tie */ }
+    else if (RPS_BEATS[c1]===c2) { game.score1++; roundWinner=game.p1; }
+    else { game.score2++; roundWinner=game.p2; }
+    const roundDesc=`${RPS_EMOJI[c1]} <@${game.p1}> vs <@${game.p2}> ${RPS_EMOJI[c2]}\n\n${roundWinner?`🏆 <@${roundWinner}> wins this round!`:'🤝 Tie round!'}`;
+    game.choice1=null; game.choice2=null; game.round++;
+    const needed=Math.ceil(game.bestOf/2);
+    if (game.score1>=needed||game.score2>=needed||game.round>game.bestOf) {
+      const winner=game.score1>game.score2?game.p1:game.score2>game.score1?game.p2:null;
+      delete rpsGames[interaction.channel.id];
+      return interaction.update({embeds:[new EmbedBuilder().setColor(winner?'#FFD700':'#5865F2').setTitle(`🎮 RPS — ${winner?'Game Over! 🏆':'Draw!'}`)
+        .setDescription(`${roundDesc}\n\n**Final Score:** <@${game.p1}> **${game.score1}** — **${game.score2}** <@${game.p2}>\n\n${winner?`🥇 <@${winner}> WINS THE MATCH!`:'🤝 It\'s a draw!'}`)
+        .setTimestamp()],components:[]});
+    }
+    await interaction.update({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle(`🎮 RPS — Round ${game.round-1} Result`).setDescription(`${roundDesc}\n\n**Score:** <@${game.p1}> **${game.score1}** — **${game.score2}** <@${game.p2}>\n\nRound ${game.round} starting...`).setTimestamp()],components:[]});
+    await sleep(1500);
+    game.choice1=null; game.choice2=null;
+    return interaction.editReply({embeds:[buildRPSLobbyEmbed(game)],components:buildRPSRows(false)});
+  }
+
+  // Trivia Battle
+  if (interaction.isButton() && interaction.customId.startsWith('tb:')) {
+    const idx = parseInt(interaction.customId.split(':')[1]);
+    const game = triviaBattleGames[interaction.channel.id];
+    if (!game) return interaction.reply({content:'❌ No trivia battle here.',ephemeral:true});
+    const uid = interaction.user.id;
+    if (uid!==game.p1&&uid!==game.p2) return interaction.reply({content:'❌ You are not in this game.',ephemeral:true});
+    if (game.answered?.includes(uid)) return interaction.reply({content:'✅ Already answered this round!',ephemeral:true});
+    if (!game.answered) game.answered=[];
+    game.answered.push(uid);
+    const q=game.questions[game.qNum];
+    const chosen=q.choices[idx];
+    const correct=chosen===q.a;
+    if (correct && !game.roundWinner) {
+      game.roundWinner=uid;
+      if (uid===game.p1) game.score1++; else game.score2++;
+    }
+    await interaction.reply({content:`${correct?'✅ Correct!':'❌ Wrong!'} ${correct?'You earn a point!':'The other player might get it.'}`,ephemeral:true});
+    if (game.answered.length<2) return;
+    // Both answered
+    const winner=game.roundWinner;
+    game.qNum++; game.answered=[]; game.roundWinner=null;
+    if (game.qNum>=game.questions.length) {
+      const overall=game.score1>game.score2?game.p1:game.score2>game.score1?game.p2:null;
+      delete triviaBattleGames[interaction.channel.id];
+      return interaction.message.edit({embeds:[new EmbedBuilder().setColor('#E67E22').setTitle('⚡ Trivia Battle — Finished!')
+        .setDescription(`**Final Scores:**\n<@${game.p1}> — **${game.score1}** pts\n<@${game.p2}> — **${game.score2}** pts\n\n${overall?`🏆 <@${overall}> WINS!`:'🤝 It\'s a tie!'}`)
+        .setTimestamp()],components:[]});
+    }
+    await sleep(800);
+    return interaction.message.edit({embeds:[buildTriviaBattleEmbed(game)],components:buildTriviaBattleRows(false)});
+  }
+
+  // Memory Match
+  if (interaction.isButton() && interaction.customId.startsWith('mem:')) {
+    const idx = parseInt(interaction.customId.split(':')[1]);
+    const game = memoryGames[interaction.user.id];
+    if (!game) return interaction.reply({content:'❌ No Memory game. Use `!memory` to start.',ephemeral:true});
+    if (interaction.user.id !== game.userId) return interaction.reply({content:'❌ Not your game!',ephemeral:true});
+    if (game.matched[idx]||game.flipped[idx]) return interaction.reply({content:'❌ Already revealed.',ephemeral:true});
+    game.flipped[idx]=true;
+    const flippedIdxs=game.flipped.map((f,i)=>f&&!game.matched[i]?i:-1).filter(i=>i>=0);
+    if (flippedIdxs.length<2) return interaction.update({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('🃏 Memory Match').setDescription(`${renderMemory(game)}\n\n**Moves:** ${game.moves} | **Pairs:** ${game.score}/6\n\nFlipped **${game.cards[idx]}** — pick another card!`).setTimestamp()],components:buildMemoryRows(game,false)});
+    game.moves++;
+    const [a,b]=flippedIdxs;
+    if (game.cards[a]===game.cards[b]) {
+      game.matched[a]=true; game.matched[b]=true; game.flipped[a]=false; game.flipped[b]=false; game.score++;
+      if (game.score>=6) {
+        delete memoryGames[interaction.user.id];
+        return interaction.update({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🃏 Memory Match — Complete! 🏆').setDescription(`${renderMemory(game)}\n\n✅ All pairs matched!\n**Moves:** ${game.moves} | **Rating:** ${game.moves<=10?'🌟🌟🌟 Perfect!':game.moves<=15?'⭐⭐ Great!':'⭐ Good!'}`).setTimestamp()],components:[]});
+      }
+      return interaction.update({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🃏 Memory Match — Match! ✅').setDescription(`${renderMemory(game)}\n\n✅ **Match!** +1 pair\n**Moves:** ${game.moves} | **Pairs:** ${game.score}/6`).setTimestamp()],components:buildMemoryRows(game,false)});
+    }
+    // No match — show both then hide
+    game.flipped[a]=true; game.flipped[b]=true;
+    await interaction.update({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🃏 Memory Match — No Match ❌').setDescription(`${renderMemory(game)}\n\n❌ **No match!** ${game.cards[a]} ≠ ${game.cards[b]}\n**Moves:** ${game.moves} | **Pairs:** ${game.score}/6`).setTimestamp()],components:buildMemoryRows(game,true)});
+    await sleep(1200);
+    game.flipped[a]=false; game.flipped[b]=false;
+    return interaction.editReply({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('🃏 Memory Match').setDescription(`${renderMemory(game)}\n\n**Moves:** ${game.moves} | **Pairs:** ${game.score}/6`).setTimestamp()],components:buildMemoryRows(game,false)});
+  }
+
+  // Higher or Lower
+  if (interaction.isButton() && interaction.customId.startsWith('hol:')) {
+    const action = interaction.customId.split(':')[1];
+    const game = holGames[interaction.user.id];
+    if (!game) return interaction.reply({content:'❌ No H/L game. Use `!hol` to start.',ephemeral:true});
+    if (interaction.user.id !== game.userId) return interaction.reply({content:'❌ Not your game!',ephemeral:true});
+    if (action==='quit') {
+      delete holGames[interaction.user.id];
+      return interaction.update({embeds:[new EmbedBuilder().setColor('#95A5A6').setTitle('📊 Higher or Lower — Quit').setDescription(`Streak: **${game.streak}** | Best: **${game.best}**`).setTimestamp()],components:[]});
+    }
+    const cur=game.items[game.idx]; const prev=game.idx>0?game.items[game.idx-1]:null;
+    if (!prev) { game.idx++; return interaction.update({embeds:[buildHOLEmbed(game)],components:buildHOLRows(false)}); }
+    const correct=(action==='higher'&&cur.val>prev.val)||(action==='lower'&&cur.val<prev.val)||(action==='higher'&&cur.val===prev.val);
+    if (!correct) {
+      delete holGames[interaction.user.id];
+      return interaction.update({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('📊 Higher or Lower — Wrong! ❌')
+        .setDescription(`**${cur.name}** = **${cur.val} ${cur.unit}**\n${action==='higher'?'You said Higher':'You said Lower'} — it was ${cur.val>prev.val?'Higher 📈':'Lower 📉'}!\n\n💀 **Game over!** Streak: **${game.streak}** | Best: **${game.best}**`)
+        .setTimestamp()],components:[]});
+    }
+    game.streak++; if(game.streak>game.best) game.best=game.streak;
+    game.idx++;
+    if (game.idx>=game.items.length) {
+      delete holGames[interaction.user.id];
+      return interaction.update({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('📊 Higher or Lower — Complete! 🏆').setDescription(`You got through all questions!\n**Final Streak:** ${game.streak} | 🌟 Perfect score!`).setTimestamp()],components:[]});
+    }
+    return interaction.update({embeds:[new EmbedBuilder().setColor('#1ABC9C').setTitle('📊 Higher or Lower — Correct! ✅')
+      .setDescription(`**${cur.name}** = **${cur.val} ${cur.unit}** — ${action==='higher'?'Higher ✅':'Lower ✅'}\n\n**Streak: ${game.streak}** 🔥\n\nNext up: **${game.items[game.idx].name}**\nIs it Higher or Lower than **${cur.val} ${cur.unit}**?`)
+      .setTimestamp()],components:buildHOLRows(false)});
+  }
+
+  // Dice Poker
+  if (interaction.isButton() && interaction.customId.startsWith('dp:')) {
+    const parts = interaction.customId.split(':');
+    const game = dicePokerGames[interaction.user.id];
+    if (!game) return interaction.reply({content:'❌ No Dice Poker game. Use `!dicepoker` to start.',ephemeral:true});
+    if (interaction.user.id !== game.userId) return interaction.reply({content:'❌ Not your game!',ephemeral:true});
+    if (parts[1]==='hold') {
+      const di=parseInt(parts[2]);
+      game.held[di]=!game.held[di];
+      return interaction.update({embeds:[buildDPEmbed(game,'hold')],components:buildDPHoldRows(game.dice,game.held,false)});
+    }
+    if (parts[1]==='roll') {
+      game.dice=game.dice.map((d,i)=>game.held[i]?d:Math.floor(Math.random()*6)+1);
+      game.rerolls--;
+      if (game.rerolls<=0) {
+        const hand=evalDiceHand(game.dice);
+        const payout=hand.rank>=3?game.bet*hand.rank:hand.rank>=1?game.bet:0;
+        delete dicePokerGames[interaction.user.id];
+        const resultColor=hand.rank>=3?'#FFD700':hand.rank>=1?'#57F287':'#ED4245';
+        return interaction.update({embeds:[new EmbedBuilder().setColor(resultColor).setTitle(`🎲 Dice Poker — ${hand.name}`)
+          .setDescription(`**Your Dice:** ${game.dice.map(d=>diceFace(d)).join(' ')}\n\n${hand.rank>=3?`🏆 Win! **+${payout} coins**`:hand.rank>=1?`↩️ Push — **${payout} coins** back`:hand.rank===0?`😞 Loss — **${game.bet} coins** lost`:''}\n\nBet: ${game.bet} | Rank: ${hand.rank}/8`)
+          .setTimestamp()],components:[]});
+      }
+      game.held=Array(5).fill(false);
+      return interaction.update({embeds:[buildDPEmbed(game,'hold')],components:buildDPHoldRows(game.dice,game.held,false)});
+    }
+  }
+
   // Welcome Panel Buttons
   if (!interaction.isButton() && !interaction.isStringSelectMenu()) return;
   if (!interaction.customId?.startsWith('welcome:')) return;
@@ -568,6 +1142,135 @@ client.on('messageCreate', async (message) => {
     return message.reply({embeds:[infoEmbed('🔢 Guess',`${hint} Attempts: **${ngGame.attempts}/7**`)]});
   }
 
+  // Math Duel answer
+  const mdGame = mathDuelGames[message.channel.id];
+  if (mdGame && (message.author.id===mdGame.p1||message.author.id===mdGame.p2) && !message.content.startsWith(PREFIX)) {
+    const ans = parseInt(message.content.trim());
+    if (!isNaN(ans) && ans===mdGame.current.a && !mdGame.answered) {
+      mdGame.answered=true;
+      const uid=message.author.id;
+      if(uid===mdGame.p1) mdGame.score1++; else mdGame.score2++;
+      mdGame.qNum++;
+      const won=mdGame.score1>=3||mdGame.score2>=3||mdGame.qNum>=5;
+      if(won){
+        const winner=mdGame.score1>mdGame.score2?mdGame.p1:mdGame.score2>mdGame.score1?mdGame.p2:null;
+        delete mathDuelGames[message.channel.id];
+        return message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🧮 Math Duel — Finished!')
+          .setDescription(`✅ <@${uid}> got it! **${mdGame.current.q} = ${mdGame.current.a}**\n\n**Final Scores:**\n<@${mdGame.p1}> — ${mdGame.score1}pts\n<@${mdGame.p2}> — ${mdGame.score2}pts\n\n${winner?`🏆 <@${winner}> WINS!`:'🤝 Tie!'}`)
+          .setTimestamp()]});
+      }
+      mdGame.answered=false;
+      mdGame.current=genMathQ(mdGame.diff);
+      return message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('✅ Correct!').setDescription(`<@${uid}> got **${mdGame.current.q}** → **${mdGame.current.a}**! +1 point\n\n**Next Question — Q${mdGame.qNum+1}/5:**\n> 🔢 **${mdGame.current.q} = ?**\n\n<@${mdGame.p1}> ${mdGame.score1}pts vs ${mdGame.score2}pts <@${mdGame.p2}>`).setTimestamp()]});
+    }
+    return;
+  }
+
+  // Word Chain answer
+  const wcGame = wordChainGames[message.channel.id];
+  if (wcGame && message.author.id===wcGame.currentTurn && !message.content.startsWith(PREFIX)) {
+    const word = message.content.trim().toLowerCase();
+    if (!/^[a-z]+$/.test(word)) return;
+    clearTimeout(wcGame.timer);
+    if (word[0]!==wcGame.lastLetter) return message.reply(`❌ Word must start with **${wcGame.lastLetter.toUpperCase()}**!`);
+    if (wcGame.used.has(word)) return message.reply('❌ That word was already used!');
+    if (word.length<2) return message.reply('❌ Word must be at least 2 letters!');
+    wcGame.used.add(word);
+    wcGame.chain.push(word);
+    wcGame.lastLetter=word[word.length-1];
+    wcGame.currentTurn=wcGame.currentTurn===wcGame.p1?wcGame.p2:wcGame.p1;
+    // Set timeout for next player
+    wcGame.timer=setTimeout(async()=>{
+      const loser=wcGame.currentTurn;
+      if(loser===wcGame.p1) wcGame.lives1--; else wcGame.lives2--;
+      if(wcGame.lives1<=0||wcGame.lives2<=0){
+        const winner=wcGame.lives1>0?wcGame.p1:wcGame.p2;
+        delete wordChainGames[message.channel.id];
+        return message.channel.send({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔗 Word Chain — Game Over!').setDescription(`⏱️ <@${loser}> ran out of time!\n\n🏆 <@${winner}> WINS!\n\n**Chain:** ${wcGame.chain.join(' → ')}`).setTimestamp()]});
+      }
+      wcGame.currentTurn=wcGame.currentTurn===wcGame.p1?wcGame.p2:wcGame.p1;
+      message.channel.send({embeds:[buildWordChainEmbed(wcGame)]});
+    },15000);
+    return message.reply({embeds:[buildWordChainEmbed(wcGame)]});
+  }
+
+  // Battleship coordinate input
+  const bsGame = battleshipGames[message.channel.id];
+  if (bsGame && message.author.id===bsGame.currentTurn && !message.content.startsWith(PREFIX)) {
+    const coord = parseBSCoord(message.content);
+    if (!coord) return;
+    const [r,c]=coord;
+    const isP1=message.author.id===bsGame.p1;
+    const shots=isP1?bsGame.shots1:bsGame.shots2;
+    const targetBoard=isP1?bsGame.board2:bsGame.board1;
+    const targetShips=isP1?bsGame.ships2:bsGame.ships1;
+    if (shots.some(s=>s[0]===r&&s[1]===c)) return message.reply('❌ Already shot there! Pick another coordinate.');
+    shots.push([r,c]);
+    const hit=targetBoard[r][c]===1;
+    let sunkMsg='';
+    if (hit) {
+      const ship=targetShips.find(s=>s.cells.some(([sr,sc])=>sr===r&&sc===c));
+      if(ship){ship.hits++;if(ship.hits>=ship.len)sunkMsg=`\n\n💥 **${ship.name} SUNK!** ☠️`;}
+    }
+    const allSunk=targetShips.every(s=>s.hits>=s.len);
+    if (allSunk) {
+      delete battleshipGames[message.channel.id];
+      return message.reply({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🚢 Battleship — WINNER! 🏆')
+        .setDescription(`🎯 **${message.author.username}** sinks the last ship!\n\n<@${message.author.id}> **WINS THE BATTLE!** ⚓\n\n${renderBSGrid(targetBoard,shots,true)}`)
+        .setTimestamp()]});
+    }
+    bsGame.currentTurn=bsGame.currentTurn===bsGame.p1?bsGame.p2:bsGame.p1;
+    return message.reply({embeds:[new EmbedBuilder().setColor(hit?'#E74C3C':'#3498DB').setTitle(`🚢 Battleship — ${hit?'💥 HIT!':'〰️ Miss!'}`)
+      .setDescription(`**${message.author.username}** fires at **${message.content.trim().toUpperCase()}** — ${hit?'💥 HIT!':'〰️ Miss!'}${sunkMsg}\n\n${renderBSGrid(targetBoard,shots)}\n\n<@${bsGame.currentTurn}>'s turn! Type a coordinate (e.g. \`A1\`)`)
+      .setTimestamp()]});
+  }
+
+  // Scramble answer
+  const scGame = scrambleGames[message.channel.id];
+  if (scGame && !message.content.startsWith(PREFIX)) {
+    const guess = message.content.trim().toUpperCase();
+    if (guess===scGame.word) {
+      const uid=message.author.id;
+      scGame.scores[uid]=(scGame.scores[uid]||0)+1;
+      scGame.round++;
+      if(scGame.round>=scGame.maxRounds){
+        delete scrambleGames[message.channel.id];
+        const scoreboard=Object.entries(scGame.scores).sort(([,a],[,b])=>b-a).map(([id,s],i)=>`${['🥇','🥈','🥉'][i]||'🏅'} <@${id}>: **${s}** pts`).join('\n');
+        return message.reply({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🔀 Scramble — Game Over!')
+          .setDescription(`✅ <@${uid}> got it! The word was **${scGame.word}**!\n\n**Final Scores:**\n${scoreboard||'No scores yet.'}`)
+          .setTimestamp()]});
+      }
+      const next=SCRAMBLE_WORDS[Math.floor(Math.random()*SCRAMBLE_WORDS.length)];
+      scGame.word=next.word; scGame.hint=next.hint; scGame.scrambled=scrambleWord(next.word);
+      return message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🔀 Scramble — Correct! ✅')
+        .setDescription(`✅ <@${uid}> got it! The word was **${scGame.word.toLowerCase()}**!\n\n**Round ${scGame.round}/${scGame.maxRounds}:**\nUnscramble: \`${scGame.scrambled}\`\n💡 Hint: ${scGame.hint}\n\n*Type your answer in chat!*`)
+        .setTimestamp()]});
+    }
+  }
+
+  // Emoji Decode answer
+  const edGame = emojiDecodeGames[message.channel.id];
+  if (edGame && !message.content.startsWith(PREFIX)) {
+    const guess=message.content.trim().toLowerCase().replace(/\s+/g,'');
+    if(guess===edGame.puzzle.answer||guess===edGame.puzzle.display.toLowerCase().replace(/\s+/g,'')){
+      const uid=message.author.id;
+      edGame.scores[uid]=(edGame.scores[uid]||0)+1;
+      edGame.round++;
+      if(edGame.round>=edGame.maxRounds){
+        delete emojiDecodeGames[message.channel.id];
+        const scoreboard=Object.entries(edGame.scores).sort(([,a],[,b])=>b-a).map(([id,s],i)=>`${['🥇','🥈','🥉'][i]||'🏅'} <@${id}>: **${s}** pts`).join('\n');
+        return message.reply({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🤔 Emoji Decode — Finished!')
+          .setDescription(`✅ <@${uid}> got it! Answer: **${edGame.puzzle.display}**\n\n**Final Scores:**\n${scoreboard||'No scores yet.'}`)
+          .setTimestamp()]});
+      }
+      const next=EMOJI_PUZZLES[Math.floor(Math.random()*EMOJI_PUZZLES.length)];
+      edGame.puzzle=next;
+      return message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🤔 Emoji Decode — Correct! ✅')
+        .setDescription(`✅ <@${uid}> cracked it! Answer: **${edGame.puzzle.display}**\n\n**Round ${edGame.round}/${edGame.maxRounds}:**\nDecode: **${next.emojis}**\n💡 Hint: ${next.hint}\n\n*Type your answer in chat!*`)
+        .setTimestamp()]});
+    }
+  }
+
   // Wordle guess
   const wlGame = wordleGames[message.channel.id];
   if (wlGame && wlGame.userId===message.author.id && !message.content.startsWith(PREFIX)) {
@@ -598,7 +1301,7 @@ client.on('messageCreate', async (message) => {
           {name:'📊 Info',       value:`\`userinfo\` \`serverinfo\` \`botinfo\` \`ping\` \`avatar\` \`roleinfo\` \`profile\``},
           {name:'📩 DM',         value:`\`dm\` \`dmall\` \`announce\``},
           {name:'😂 Fun',        value:`\`meme\` \`joke\` \`8ball\` \`ship\` \`fight\` \`slap\` \`hug\` \`kiss\` \`pat\` \`coinflip\` \`roll\` \`gay\` \`iq\` \`rizz\` \`aura\` \`simp\` \`drip\` \`sus\``},
-          {name:'🎮 Games',      value:`\`ttt\` \`hangman\` \`trivia\` \`guess\` \`rps\` \`blackjack\` \`slots\` \`mines\` \`connect4\` \`wordle\``},
+          {name:'🎮 Games',      value:`\`ttt\` \`hangman\` \`trivia\` \`guess\` \`rps\` \`blackjack\` \`slots\` \`mines\` \`connect4\` \`wordle\` \`snake\` \`2048\` \`mathduel\` \`wordchain\` \`triviabattle\` \`battleship\` \`memory\` \`hol\` \`dicepoker\` \`scramble\` \`emojidecode\``},
           {name:'🎫 Tickets',    value:`\`ticket\` \`ticketset\` \`ticketreset\``},
           {name:'🎉 Welcome',    value:`\`welcomeset\` \`welcometest\``},
           {name:'🛠️ Utility',   value:`\`say\` \`embed\` \`poll\``},
@@ -1211,6 +1914,173 @@ client.on('messageCreate', async (message) => {
       message.reply({embeds:[new EmbedBuilder().setColor('#538D4E').setTitle('🟩 Wordle')
         .setDescription('Guess the **5-letter word** in 6 tries!\n\n🟩 Right letter + spot\n🟨 Right letter, wrong spot\n⬛ Wrong letter\n\nType your first guess!')
         .setFooter({text:'6 guesses'}).setTimestamp()]});
+      break;
+    }
+
+    case 'snake': {
+      if(snakeGames[message.author.id]) return message.reply('❌ You already have a snake game! Quit it first with the 🛑 button.');
+      const g=makeSnakeGame(); g.userId=message.author.id;
+      snakeGames[message.author.id]=g;
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🐍 Snake').setDescription('*Loading game board...*').setTimestamp()]});
+      await sleep(600);
+      await initMsg.edit({embeds:[buildSnakeEmbed(g,message.author.id)],components:buildSnakeRows(false)});
+      break;
+    }
+
+    case '2048': {
+      if(game2048[message.author.id]) return message.reply('❌ You already have a 2048 game running!');
+      const board=make2048Board();
+      game2048[message.author.id]={board,score:0,userId:message.author.id};
+      const g=game2048[message.author.id];
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🎯 2048').setDescription('*Shuffling tiles...*').setTimestamp()]});
+      await sleep(500);
+      await initMsg.edit({embeds:[build2048Embed(g)],components:build2048Rows(false)});
+      break;
+    }
+
+    case 'rps': case 'rockpaperscissors': {
+      const opp=message.mentions.members.first();
+      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
+      if(rpsGames[message.channel.id]) return message.reply('❌ RPS game already running here!');
+      const bestOf=parseInt(args[1])||3;
+      const allowed=[1,3,5,7];
+      if(!allowed.includes(bestOf)) return message.reply('❌ Best-of must be 1, 3, 5 or 7.');
+      const g={p1:message.author.id,p2:opp.id,score1:0,score2:0,round:1,bestOf,choice1:null,choice2:null};
+      rpsGames[message.channel.id]=g;
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🎮 Rock Paper Scissors').setDescription(`⚔️ **${message.author.username}** challenges **${opp.user.username}**!\n**Best of ${bestOf}** — May the best hand win! ✊`).setTimestamp()]});
+      await sleep(800);
+      await initMsg.edit({embeds:[buildRPSLobbyEmbed(g)],components:buildRPSRows(false)});
+      break;
+    }
+
+    case 'mathduel': case 'md': {
+      const opp=message.mentions.members.first();
+      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
+      if(mathDuelGames[message.channel.id]) return message.reply('❌ Math Duel already running here!');
+      const diff=parseInt(args[1])||1;
+      if(diff<1||diff>3) return message.reply('❌ Difficulty: 1 (easy) 2 (medium) 3 (hard)');
+      const q=genMathQ(diff);
+      const g={p1:message.author.id,p2:opp.id,score1:0,score2:0,qNum:0,diff,current:q,answered:false};
+      mathDuelGames[message.channel.id]=g;
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🧮 Math Duel').setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\nDifficulty: ${'⭐'.repeat(diff)}\n\n*Loading questions...*`).setTimestamp()]});
+      await sleep(800);
+      await initMsg.edit({embeds:[buildMathEmbed(g)]});
+      break;
+    }
+
+    case 'wordchain': case 'wc': {
+      const opp=message.mentions.members.first();
+      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
+      if(wordChainGames[message.channel.id]) return message.reply('❌ Word Chain already running here!');
+      const starters='abcdefghijklmnoprstw';
+      const startLetter=starters[Math.floor(Math.random()*starters.length)];
+      const g={p1:message.author.id,p2:opp.id,chain:[],lastLetter:startLetter,currentTurn:message.author.id,used:new Set(),lives1:3,lives2:3,timer:null};
+      wordChainGames[message.channel.id]=g;
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('🔗 Word Chain').setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\n\n*Setting up the chain...*`).setTimestamp()]});
+      await sleep(700);
+      await initMsg.edit({embeds:[buildWordChainEmbed(g)]});
+      g.timer=setTimeout(async()=>{
+        const loser=g.currentTurn; if(loser===g.p1) g.lives1--; else g.lives2--;
+        if(g.lives1<=0||g.lives2<=0){const winner=g.lives1>0?g.p1:g.p2;delete wordChainGames[message.channel.id];return message.channel.send({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔗 Word Chain — Over!').setDescription(`⏱️ <@${loser}> timed out!\n🏆 <@${winner}> WINS!`).setTimestamp()]});}
+        g.currentTurn=g.currentTurn===g.p1?g.p2:g.p1;
+        message.channel.send({embeds:[buildWordChainEmbed(g)]});
+      },15000);
+      break;
+    }
+
+    case 'triviabattle': case 'tb': {
+      const opp=message.mentions.members.first();
+      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
+      if(triviaBattleGames[message.channel.id]) return message.reply('❌ Trivia Battle already running here!');
+      const shuffled=[...TRIVIA_BATTLE_Q].sort(()=>Math.random()-0.5).slice(0,5);
+      const g={p1:message.author.id,p2:opp.id,questions:shuffled,qNum:0,score1:0,score2:0,answered:[],roundWinner:null};
+      triviaBattleGames[message.channel.id]=g;
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#E67E22').setTitle('⚡ Trivia Battle').setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\n5 questions — fastest correct answer wins the point!\n\n*Loading questions...*`).setTimestamp()]});
+      await sleep(800);
+      await initMsg.edit({embeds:[buildTriviaBattleEmbed(g)],components:buildTriviaBattleRows(false)});
+      break;
+    }
+
+    case 'battleship': case 'bs': {
+      const opp=message.mentions.members.first();
+      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
+      if(battleshipGames[message.channel.id]) return message.reply('❌ Battleship already running here!');
+      const b1=makeBSBoard(), b2=makeBSBoard();
+      const ships1=placeBSShips(b1), ships2=placeBSShips(b2);
+      const g={p1:message.author.id,p2:opp.id,board1:b1,board2:b2,ships1,ships2,shots1:[],shots2:[],currentTurn:message.author.id};
+      battleshipGames[message.channel.id]=g;
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#3498DB').setTitle('🚢 Battleship').setDescription(`⚓ **${message.author.username}** vs **${opp.user.username}**!\n\n*Deploying fleets on a 5×5 grid...*\n🚢 Ships placed secretly!`).setTimestamp()]});
+      await sleep(900);
+      await initMsg.edit({embeds:[new EmbedBuilder().setColor('#3498DB').setTitle('🚢 Battleship — Battle Begins! ⚓')
+        .setDescription(`<@${message.author.id}> vs <@${opp.id}>\n\n**Grid:** 5×5 (A–E columns, 1–5 rows)\n**Ships:** ${ships1.map(s=>s.name).join(', ')}\n\n<@${g.currentTurn}>'s turn! Type a coordinate like \`A1\`, \`C3\`, \`E5\`\n\n${renderBSGrid(b2,[])}`)
+        .setTimestamp()]});
+      break;
+    }
+
+    case 'memory': {
+      if(memoryGames[message.author.id]) return message.reply('❌ You already have a Memory game! Finish it first.');
+      const g=makeMemoryGame(); g.userId=message.author.id;
+      memoryGames[message.author.id]=g;
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('🃏 Memory Match').setDescription('*Shuffling cards...*').setTimestamp()]});
+      await sleep(600);
+      await initMsg.edit({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('🃏 Memory Match').setDescription(`${renderMemory(g)}\n\n**12 cards — 6 pairs** hidden face-down!\nClick buttons 1–12 to flip cards.\n\n**Moves:** 0 | **Pairs:** 0/6`).setTimestamp()],components:buildMemoryRows(g,false)});
+      break;
+    }
+
+    case 'hol': case 'higherorlower': {
+      if(holGames[message.author.id]) return message.reply('❌ You already have a Higher or Lower game!');
+      const items=[...HOL_ITEMS].sort(()=>Math.random()-0.5).slice(0,8);
+      const g={items,idx:0,streak:0,best:0,userId:message.author.id};
+      holGames[message.author.id]=g;
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#1ABC9C').setTitle('📊 Higher or Lower').setDescription('*Loading questions...*').setTimestamp()]});
+      await sleep(500);
+      // Show first item value, then go to second
+      await initMsg.edit({embeds:[new EmbedBuilder().setColor('#1ABC9C').setTitle('📊 Higher or Lower — Starting!')
+        .setDescription(`**First card:** ${items[0].name}\n> **${items[0].val} ${items[0].unit}**\n\n**Next:** ${items[1].name}\nIs it **Higher** or **Lower**?\n\n⭐ Streak: 0`)
+        .setFooter({text:'Click a button!'}).setTimestamp()],components:buildHOLRows(false)});
+      g.idx=1; // Ready to compare
+      break;
+    }
+
+    case 'dicepoker': case 'dp': {
+      if(dicePokerGames[message.author.id]) return message.reply('❌ You already have a Dice Poker game running!');
+      const bet=parseInt(args[0])||50;
+      const dice=rollDice(5);
+      const g={dice,held:Array(5).fill(false),rerolls:2,bet,userId:message.author.id};
+      dicePokerGames[message.author.id]=g;
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#E74C3C').setTitle('🎲 Dice Poker').setDescription(`*Rolling dice...*\n\nBet: **${bet} coins**`).setTimestamp()]});
+      await sleep(700);
+      await initMsg.edit({embeds:[buildDPEmbed(g,'hold')],components:buildDPHoldRows(g.dice,g.held,false)});
+      break;
+    }
+
+    case 'scramble': {
+      if(scrambleGames[message.channel.id]) return message.reply('❌ Scramble already running here!');
+      const rounds=parseInt(args[0])||5;
+      if(rounds<1||rounds>10) return message.reply('❌ Rounds must be 1–10.');
+      const entry=SCRAMBLE_WORDS[Math.floor(Math.random()*SCRAMBLE_WORDS.length)];
+      const g={word:entry.word,hint:entry.hint,scrambled:scrambleWord(entry.word),round:1,maxRounds:rounds,scores:{}};
+      scrambleGames[message.channel.id]=g;
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#F39C12').setTitle('🔀 Scramble').setDescription('*Scrambling a word...*').setTimestamp()]});
+      await sleep(600);
+      await initMsg.edit({embeds:[new EmbedBuilder().setColor('#F39C12').setTitle(`🔀 Scramble — Round 1/${rounds}`)
+        .setDescription(`Unscramble this word:\n\n# \`${g.scrambled}\`\n\n💡 **Hint:** ${g.hint}\n\n*Type your answer in chat — anyone can answer!*`)
+        .setFooter({text:`${rounds} rounds total • First correct answer gets the point!`}).setTimestamp()]});
+      break;
+    }
+
+    case 'emojidecode': case 'ed': {
+      if(emojiDecodeGames[message.channel.id]) return message.reply('❌ Emoji Decode already running here!');
+      const rounds=parseInt(args[0])||5;
+      if(rounds<1||rounds>10) return message.reply('❌ Rounds must be 1–10.');
+      const puzzle=EMOJI_PUZZLES[Math.floor(Math.random()*EMOJI_PUZZLES.length)];
+      const g={puzzle,round:1,maxRounds:rounds,scores:{}};
+      emojiDecodeGames[message.channel.id]=g;
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#8E44AD').setTitle('🤔 Emoji Decode').setDescription('*Loading emoji puzzle...*').setTimestamp()]});
+      await sleep(600);
+      await initMsg.edit({embeds:[new EmbedBuilder().setColor('#8E44AD').setTitle(`🤔 Emoji Decode — Round 1/${rounds}`)
+        .setDescription(`What do these emojis represent?\n\n# ${puzzle.emojis}\n\n💡 **Hint:** ${puzzle.hint}\n\n*Type your answer in chat — anyone can answer! (no spaces needed)*`)
+        .setFooter({text:`${rounds} rounds total • First correct answer gets the point!`}).setTimestamp()]});
       break;
     }
 
