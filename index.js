@@ -13,6 +13,20 @@ const {
 } = require('discord.js');
 require('dotenv').config();
 
+// ─── Single-Instance Guard (TCP Port Lock) ────────────────────────────────────
+// Uses a local TCP server as an atomic process lock — works on Windows & Linux.
+// If a second instance starts and the port is taken, it exits cleanly.
+const net = require('net');
+const LOCK_PORT = parseInt(process.env.LOCK_PORT) || 47392;
+const lockServer = net.createServer();
+lockServer.listen(LOCK_PORT, '127.0.0.1', () => { /* Port acquired — sole instance */ });
+lockServer.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ Bot already running (port ${LOCK_PORT} in use).\nThis prevents double responses.\nClose the other process first, then restart.\n`);
+    process.exit(1);
+  }
+});
+
 // ─── Client Setup ─────────────────────────────────────────────────────────────
 const client = new Client({
   intents: [
@@ -27,1733 +41,1167 @@ const client = new Client({
 const PREFIX = process.env.PREFIX || '!';
 
 // ─── Status System ────────────────────────────────────────────────────────────
-//
-// Behaviour:
-//   • 0 statuses  → no activity set
-//   • 1 status    → shown permanently, never rotated (stays until you change it)
-//   • 2+ statuses → rotate on an interval forever
-//
-// STATUS_DELAY in .env = ms between rotations (default: 30000 = 30s)
-
-// Default statuses — owner can add/remove/clear via commands
-const statusList = [
-  { text: `${process.env.PREFIX || '!'}help | Multipurpose Bot`, type: 'PLAYING' },
-];
-
-let statusIndex = 0;
-let statusInterval = null;
-
-// How long each status shows when rotating (ms). Default 30 seconds.
+const statusList = [{ text: `${PREFIX}help | Multipurpose Bot`, type: 'PLAYING' }];
+let statusIndex = 0, statusInterval = null;
 const STATUS_DELAY = parseInt(process.env.STATUS_DELAY) || 30000;
+const ActivityTypeMap = { PLAYING: 0, STREAMING: 1, LISTENING: 2, WATCHING: 3, COMPETING: 5 };
 
-const ActivityTypeMap = {
-  PLAYING:   0,
-  STREAMING: 1,
-  LISTENING: 2,
-  WATCHING:  3,
-  COMPETING: 5,
-};
-
-/** Apply the status at the current index without advancing it. */
 function applyCurrentStatus() {
   if (!statusList.length) return;
   const s = statusList[statusIndex % statusList.length];
   client.user.setActivity(s.text, { type: ActivityTypeMap[s.type] ?? 0 });
 }
-
-/** Advance to the next status and apply it. Called by the rotation interval. */
 function rotateStatus() {
   if (!statusList.length) return;
   statusIndex = (statusIndex + 1) % statusList.length;
   applyCurrentStatus();
 }
-
-/**
- * Start (or restart) the status system:
- *  - 0 statuses  → clear activity, stop any interval
- *  - 1 status    → apply immediately, NO interval (stays forever)
- *  - 2+ statuses → apply immediately, rotate on interval forever
- */
 function startStatusSystem() {
-  // Clear any existing rotation first
-  if (statusInterval) {
-    clearInterval(statusInterval);
-    statusInterval = null;
-  }
-
-  if (!statusList.length) {
-    client.user?.setActivity(null);
-    return;
-  }
-
-  // Show current status immediately
+  if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
+  if (!statusList.length) { client.user?.setActivity(null); return; }
   applyCurrentStatus();
-
-  // Only start rotation if there are multiple statuses
-  if (statusList.length > 1) {
-    statusInterval = setInterval(rotateStatus, STATUS_DELAY);
-  }
-  // Single status: no interval — it stays on screen forever
+  if (statusList.length > 1) statusInterval = setInterval(rotateStatus, STATUS_DELAY);
 }
-
 function stopSlideshow() {
-  if (statusInterval) {
-    clearInterval(statusInterval);
-    statusInterval = null;
-  }
+  if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
 }
 
 // ─── Global Error Handlers ────────────────────────────────────────────────────
-process.on('unhandledRejection', (error) => {
-  console.error('Unhandled promise rejection:', error);
-});
+process.on('unhandledRejection', (e) => console.error('Unhandled rejection:', e));
+process.on('uncaughtException',  (e) => console.error('Uncaught exception:', e));
+client.on('error',               (e) => console.error('Discord client error:', e));
 
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught exception:', error);
-});
-
-client.on('error', (error) => {
-  console.error('Discord client error:', error);
-});
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function missingPerm(message, perm) {
-  return message.reply(`❌ You need the **${perm}** permission to use this command.`);
-}
-
-function botMissingPerm(message, perm) {
-  return message.reply(`❌ I need the **${perm}** permission to do that.`);
-}
-
+// ─── Utility Helpers ──────────────────────────────────────────────────────────
+const missingPerm    = (msg, p) => msg.reply(`❌ You need the **${p}** permission.`);
+const botMissingPerm = (msg, p) => msg.reply(`❌ I need the **${p}** permission.`);
 function parseDuration(str) {
-  const match = str?.match(/^(\d+)(s|m|h|d)$/i);
-  if (!match) return null;
-  const units = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
-  return parseInt(match[1]) * units[match[2].toLowerCase()];
+  const m = str?.match(/^(\d+)(s|m|h|d)$/i);
+  if (!m) return null;
+  return parseInt(m[1]) * { s: 1000, m: 60000, h: 3600000, d: 86400000 }[m[2].toLowerCase()];
 }
-
 function formatDuration(ms) {
-  if (ms < 60000) return `${Math.floor(ms / 1000)}s`;
-  if (ms < 3600000) return `${Math.floor(ms / 60000)}m`;
-  if (ms < 86400000) return `${Math.floor(ms / 3600000)}h`;
-  return `${Math.floor(ms / 86400000)}d`;
+  if (ms < 60000) return `${Math.floor(ms/1000)}s`;
+  if (ms < 3600000) return `${Math.floor(ms/60000)}m`;
+  if (ms < 86400000) return `${Math.floor(ms/3600000)}h`;
+  return `${Math.floor(ms/86400000)}d`;
 }
+const successEmbed = (t, d) => new EmbedBuilder().setColor('#57F287').setTitle(`✅ ${t}`).setDescription(d).setTimestamp();
+const errorEmbed   = (d)    => new EmbedBuilder().setColor('#ED4245').setTitle('❌ Error').setDescription(d).setTimestamp();
+const infoEmbed    = (t, d) => new EmbedBuilder().setColor('#5865F2').setTitle(t).setDescription(d).setTimestamp();
+const sleep        = (ms)   => new Promise(r => setTimeout(r, ms));
 
-function successEmbed(title, desc) {
-  return new EmbedBuilder().setColor('#57F287').setTitle(`✅ ${title}`).setDescription(desc).setTimestamp();
+// ─── Fun Helpers ──────────────────────────────────────────────────────────────
+function pct(userId, seed) {
+  let h = 0, str = userId + seed + new Date().toDateString();
+  for (const c of str) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return h % 101;
 }
-
-function errorEmbed(desc) {
-  return new EmbedBuilder().setColor('#ED4245').setTitle('❌ Error').setDescription(desc).setTimestamp();
-}
-
-function infoEmbed(title, desc) {
-  return new EmbedBuilder().setColor('#5865F2').setTitle(title).setDescription(desc).setTimestamp();
-}
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const meterBar = (v, max = 100) => '█'.repeat(Math.round(v/max*10)) + '░'.repeat(10 - Math.round(v/max*10));
 
 // ─── Ready ────────────────────────────────────────────────────────────────────
-
 client.once('ready', async () => {
-  console.log(`✅ ${client.user.username} is online!`);
-  console.log(`📡 Serving ${client.guilds.cache.size} server(s)`);
-  // FIX: Fetch application info so client.application.owner is populated
-  // Without this, the owner check in status commands always fails
-  await client.application.fetch().catch((err) => {
-    console.warn('⚠️ Could not fetch application info (owner checks may fail):', err.message);
-  });
+  console.log(`✅ ${client.user.username} is online! Serving ${client.guilds.cache.size} server(s)`);
+  await client.application.fetch().catch(e => console.warn('⚠️ Could not fetch app info:', e.message));
   startStatusSystem();
 });
 
 // ─── Welcome System ───────────────────────────────────────────────────────────
-//
-// Per-guild config stored in welcomeSettings[guildId].
-// Supports:
-//   • Custom channel (set via button wizard)
-//   • Embed OR plain text message
-//   • Custom title, description, colour (embed mode)
-//   • Auto-delete after N seconds (0 = never)
-// Placeholders in title/description/text: {user}, {username}, {server}, {count}
-
-const welcomeSettings = {};   // in-memory; replace with a DB for persistence
-
-function getWelcomeSettings(guildId) {
-  if (!welcomeSettings[guildId]) {
-    welcomeSettings[guildId] = {
-      enabled     : false,
-      channelId   : null,
-      mode        : 'embed',          // 'embed' | 'text'
-      title       : '👋 Welcome to {server}!',
-      description : 'Hey {user}, welcome to **{server}**! 🎉\nWe now have **{count}** members.\nMake sure to read the rules!',
-      color       : '#57F287',
-      text        : 'Welcome {user} to **{server}**! You are member #{count}.',
-      deleteAfter : 0,                // seconds; 0 = never delete
-      thumbnail   : true,             // show user avatar in embed
-      footer      : 'Member #{count}',
-    };
-  }
-  return welcomeSettings[guildId];
+const welcomeSettings = {}, welcomePanelMessages = {};
+function getWelcomeSettings(gid) {
+  if (!welcomeSettings[gid]) welcomeSettings[gid] = {
+    enabled: false, channelId: null, mode: 'embed',
+    title: '👋 Welcome to {server}!',
+    description: 'Hey {user}, welcome to **{server}**! 🎉\nWe now have **{count}** members.',
+    color: '#57F287', text: 'Welcome {user} to **{server}**! You are member #{count}.',
+    deleteAfter: 0, thumbnail: true, footer: 'Member #{count}',
+  };
+  return welcomeSettings[gid];
 }
-
-/** Replace placeholders with live values */
 function resolvePlaceholders(str, member) {
-  return str
-    .replace(/{user}/g,     member.toString())
-    .replace(/{username}/g, member.user.username)
-    .replace(/{server}/g,   member.guild.name)
-    .replace(/{count}/g,    member.guild.memberCount);
+  return str.replace(/{user}/g, member.toString()).replace(/{username}/g, member.user.username)
+            .replace(/{server}/g, member.guild.name).replace(/{count}/g, member.guild.memberCount);
 }
-
-// ─── Welcome Panel Builder ─────────────────────────────────────────────────────
-
-// Tracks the live control-panel message per guild so buttons can refresh it
-const welcomePanelMessages = {};
-
-/** Build the embed shown in the !welcomeset control panel */
 function buildWelcomePanel(guild, cfg) {
-  const channelDisplay = cfg.channelId
-    ? `<#${cfg.channelId}>`
-    : '`Not set`';
-
-  const embed = new EmbedBuilder()
-    .setColor('#5865F2')
-    .setTitle('🎉 Welcome System — Control Panel')
-    .setDescription(
-      `Configure every aspect of the welcome message below.\n` +
-      `Use the buttons to edit each setting. Changes save instantly.`
-    )
+  const embed = new EmbedBuilder().setColor('#5865F2').setTitle('🎉 Welcome System — Control Panel')
+    .setDescription('Use the buttons below to configure the welcome message.')
     .addFields(
-      { name: '🟢 Status',        value: cfg.enabled ? '✅ **Enabled**' : '❌ **Disabled**', inline: true },
-      { name: '📢 Channel',       value: channelDisplay, inline: true },
-      { name: '💬 Mode',          value: cfg.mode === 'embed' ? '📦 Embed' : '📝 Plain Text', inline: true },
-      { name: '⏱️ Auto-Delete',   value: cfg.deleteAfter > 0 ? `${cfg.deleteAfter}s` : 'Never', inline: true },
-      { name: '🖼️ Thumbnail',     value: cfg.thumbnail ? 'On' : 'Off', inline: true },
-      { name: '​',           value: '​', inline: true },
-    )
-    .setTimestamp()
-    .setFooter({ text: `${guild.name} • Welcome Settings` });
-
+      { name: '🟢 Status',      value: cfg.enabled ? '✅ Enabled' : '❌ Disabled', inline: true },
+      { name: '📢 Channel',     value: cfg.channelId ? `<#${cfg.channelId}>` : '`Not set`', inline: true },
+      { name: '💬 Mode',        value: cfg.mode === 'embed' ? '📦 Embed' : '📝 Text', inline: true },
+      { name: '⏱️ Auto-Delete', value: cfg.deleteAfter > 0 ? `${cfg.deleteAfter}s` : 'Never', inline: true },
+      { name: '🖼️ Thumbnail',   value: cfg.thumbnail ? 'On' : 'Off', inline: true },
+      { name: '\u200b',         value: '\u200b', inline: true },
+    ).setTimestamp().setFooter({ text: `${guild.name} • Welcome Settings` });
   if (cfg.mode === 'embed') {
     embed.addFields(
-      { name: '📋 Embed Title',       value: `\`${cfg.title.slice(0, 80)}\``,       inline: false },
-      { name: '📝 Embed Description', value: `\`\`\`${cfg.description.slice(0, 300)}\`\`\``, inline: false },
-      { name: '🎨 Embed Color',       value: cfg.color, inline: true },
-      { name: '📄 Embed Footer',      value: cfg.footer ? `\`${cfg.footer}\`` : '*(none)*', inline: true },
+      { name: '📋 Title',       value: `\`${cfg.title.slice(0,80)}\``, inline: false },
+      { name: '📝 Description', value: `\`\`\`${cfg.description.slice(0,300)}\`\`\``, inline: false },
+      { name: '🎨 Color',       value: cfg.color, inline: true },
+      { name: '📄 Footer',      value: cfg.footer ? `\`${cfg.footer}\`` : '*(none)*', inline: true },
     );
   } else {
-    embed.addFields(
-      { name: '💬 Text Message', value: `\`\`\`${cfg.text.slice(0, 500)}\`\`\``, inline: false },
-    );
+    embed.addFields({ name: '💬 Text', value: `\`\`\`${cfg.text.slice(0,500)}\`\`\``, inline: false });
   }
-
-  embed.addFields({
-    name: '📌 Placeholders',
-    value: '`{user}` — mention  `{username}` — name  `{server}` — server name  `{count}` — member count',
-  });
-
+  embed.addFields({ name: '📌 Placeholders', value: '`{user}` `{username}` `{server}` `{count}`' });
   return embed;
 }
-
-/** Build the button rows for the !welcomeset control panel */
 function buildWelcomeRows(cfg) {
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('welcome:toggle')
-      .setLabel(cfg.enabled ? '🔴 Disable' : '🟢 Enable')
-      .setStyle(cfg.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId('welcome:mode')
-      .setLabel(cfg.mode === 'embed' ? '📝 Switch to Text' : '📦 Switch to Embed')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('welcome:preview')
-      .setLabel('👁️ Preview')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('welcome:reset')
-      .setLabel('🔄 Reset Defaults')
-      .setStyle(ButtonStyle.Danger),
-  );
-
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('welcome:channel')
-      .setLabel('📢 Set Channel')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('welcome:deletafter')
-      .setLabel('⏱️ Auto-Delete Time')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('welcome:thumbnail')
-      .setLabel(cfg.thumbnail ? '🖼️ Thumbnail: ON' : '🖼️ Thumbnail: OFF')
-      .setStyle(cfg.thumbnail ? ButtonStyle.Success : ButtonStyle.Secondary),
-  );
-
-  // Embed-only buttons
-  const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('welcome:title')
-      .setLabel('📋 Title')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(cfg.mode !== 'embed'),
-    new ButtonBuilder()
-      .setCustomId('welcome:description')
-      .setLabel('📝 Description')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(cfg.mode !== 'embed'),
-    new ButtonBuilder()
-      .setCustomId('welcome:color')
-      .setLabel('🎨 Color')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(cfg.mode !== 'embed'),
-    new ButtonBuilder()
-      .setCustomId('welcome:footer')
-      .setLabel('📄 Footer')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(cfg.mode !== 'embed'),
-    new ButtonBuilder()
-      .setCustomId('welcome:text')
-      .setLabel('💬 Text Msg')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(cfg.mode !== 'text'),
-  );
-
-  return [row1, row2, row3];
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('welcome:toggle').setLabel(cfg.enabled ? '🔴 Disable' : '🟢 Enable').setStyle(cfg.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('welcome:mode').setLabel(cfg.mode === 'embed' ? '📝 Switch to Text' : '📦 Switch to Embed').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('welcome:preview').setLabel('👁️ Preview').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('welcome:reset').setLabel('🔄 Reset').setStyle(ButtonStyle.Danger),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('welcome:channel').setLabel('📢 Set Channel').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('welcome:deletafter').setLabel('⏱️ Auto-Delete').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('welcome:thumbnail').setLabel(cfg.thumbnail ? '🖼️ Thumbnail: ON' : '🖼️ Thumbnail: OFF').setStyle(cfg.thumbnail ? ButtonStyle.Success : ButtonStyle.Secondary),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('welcome:title').setLabel('📋 Title').setStyle(ButtonStyle.Secondary).setDisabled(cfg.mode !== 'embed'),
+      new ButtonBuilder().setCustomId('welcome:description').setLabel('📝 Description').setStyle(ButtonStyle.Secondary).setDisabled(cfg.mode !== 'embed'),
+      new ButtonBuilder().setCustomId('welcome:color').setLabel('🎨 Color').setStyle(ButtonStyle.Secondary).setDisabled(cfg.mode !== 'embed'),
+      new ButtonBuilder().setCustomId('welcome:footer').setLabel('📄 Footer').setStyle(ButtonStyle.Secondary).setDisabled(cfg.mode !== 'embed'),
+      new ButtonBuilder().setCustomId('welcome:text').setLabel('💬 Text Msg').setStyle(ButtonStyle.Secondary).setDisabled(cfg.mode !== 'text'),
+    ),
+  ];
 }
-
 client.on('guildMemberAdd', async (member) => {
   const cfg = getWelcomeSettings(member.guild.id);
   if (!cfg.enabled || !cfg.channelId) return;
-
   const channel = member.guild.channels.cache.get(cfg.channelId);
   if (!channel) return;
-
   let sentMsg;
-
   if (cfg.mode === 'embed') {
-    const embed = new EmbedBuilder()
-      .setColor(cfg.color || '#57F287')
+    const embed = new EmbedBuilder().setColor(cfg.color || '#57F287')
       .setTitle(resolvePlaceholders(cfg.title, member))
-      .setDescription(resolvePlaceholders(cfg.description, member))
-      .setTimestamp();
+      .setDescription(resolvePlaceholders(cfg.description, member)).setTimestamp();
     if (cfg.thumbnail) embed.setThumbnail(member.user.displayAvatarURL({ forceStatic: false }));
     if (cfg.footer)    embed.setFooter({ text: resolvePlaceholders(cfg.footer, member) });
     sentMsg = await channel.send({ embeds: [embed] });
-  } else {
-    sentMsg = await channel.send(resolvePlaceholders(cfg.text, member));
-  }
-
-  if (cfg.deleteAfter > 0) {
-    setTimeout(() => sentMsg.delete().catch(() => {}), cfg.deleteAfter * 1000);
-  }
+  } else sentMsg = await channel.send(resolvePlaceholders(cfg.text, member));
+  if (cfg.deleteAfter > 0) setTimeout(() => sentMsg.delete().catch(() => {}), cfg.deleteAfter * 1000);
 });
-
-// ─── Log Member Leave ─────────────────────────────────────────────────────────
-
 client.on('guildMemberRemove', async (member) => {
-  const logChannel = member.guild.channels.cache.find(
-    (ch) => ch.name === 'logs' || ch.name === 'audit-log' || ch.name === 'mod-log'
-  );
-  if (!logChannel) return;
-
-  const embed = new EmbedBuilder()
-    .setColor('#ED4245')
-    .setTitle('👋 Member Left')
-    .setDescription(`**${(member.user.tag || member.user.username)}** has left the server.`)
-    .setThumbnail(member.user.displayAvatarURL({ forceStatic: false }))
-    .setTimestamp();
-
-  await logChannel.send({ embeds: [embed] });
+  const ch = member.guild.channels.cache.find(c => ['logs','audit-log','mod-log'].includes(c.name));
+  if (!ch) return;
+  ch.send({ embeds: [new EmbedBuilder().setColor('#ED4245').setTitle('👋 Member Left')
+    .setDescription(`**${member.user.tag || member.user.username}** left the server.`)
+    .setThumbnail(member.user.displayAvatarURL({ forceStatic: false })).setTimestamp()] });
 });
-
 
 // ─── Ticket System ────────────────────────────────────────────────────────────
-
-// Stores open tickets: { channelId: { userId, guildId } }
-const openTickets = {};
-
-// Stores active setup wizards: { userId: { step, cfg, guildId, promptMsg } }
-const setupSessions = {};
-
-// Per-guild ticket settings: { guildId: { channelName, panelTitle, panelDesc, insideTitle, insideDesc, buttonLabel } }
-const ticketSettings = {};
-
-function getTicketSettings(guildId) {
-  if (!ticketSettings[guildId]) {
-    ticketSettings[guildId] = {
-      channelName : 'ticket-{username}',
-      panelTitle  : '🎫 Support Tickets',
-      panelDesc   : 'Need help? Click the button below to open a private support ticket.\n\nA staff member will assist you as soon as possible.',
-      buttonLabel : '🎫 Open a Ticket',
-      insideTitle : '🎫 Ticket Opened',
-      insideDesc  : 'Welcome {mention}, support will be with you shortly!\n\nPlease describe your issue and a staff member will assist you.',
-    };
-  }
-  return ticketSettings[guildId];
+const openTickets = {}, setupSessions = {}, ticketSettings = {};
+function getTicketSettings(gid) {
+  if (!ticketSettings[gid]) ticketSettings[gid] = {
+    channelName: 'ticket-{username}', panelTitle: '🎫 Support Tickets',
+    panelDesc: 'Need help? Click below to open a private support ticket.',
+    buttonLabel: '🎫 Open a Ticket', insideTitle: '🎫 Ticket Opened',
+    insideDesc: 'Welcome {mention}! Please describe your issue and staff will assist you.',
+  };
+  return ticketSettings[gid];
 }
 
+// ─── Game State ───────────────────────────────────────────────────────────────
+const tttGames = {}, hangmanGames = {}, triviaGames = {}, guessGames = {};
+const bjGames  = {}, slotsCD = {}, minesGames = {}, c4Games = {}, wordleGames = {};
+
+// ─── TTT Helpers ──────────────────────────────────────────────────────────────
+const TTT_WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+const checkTTT = (b) => TTT_WINS.some(([a,c,d]) => b[a] && b[a]===b[c] && b[a]===b[d]);
+function buildTTTEmbed(g, status) {
+  return new EmbedBuilder().setColor('#5865F2').setTitle('❌ Tic Tac Toe ⭕')
+    .setDescription(`<@${g.player1}> ❌ vs ⭕ <@${g.player2}>\n\n${status}`).setTimestamp();
+}
+function buildTTTRows(board, disabled) {
+  const labels = ['↖️','⬆️','↗️','⬅️','⏺️','➡️','↙️','⬇️','↘️'];
+  return [0,1,2].map(r => {
+    const row = new ActionRowBuilder();
+    [0,1,2].forEach(c => {
+      const i = r*3+c, cell = board[i];
+      row.addComponents(new ButtonBuilder().setCustomId(`ttt:${i}`).setLabel(cell||labels[i])
+        .setStyle(cell==='❌'?ButtonStyle.Danger:cell==='⭕'?ButtonStyle.Success:ButtonStyle.Secondary)
+        .setDisabled(disabled||cell!==null));
+    });
+    return row;
+  });
+}
+
+// ─── Connect4 Helpers ─────────────────────────────────────────────────────────
+const makeC4Board = () => Array.from({length:6}, ()=>Array(7).fill(null));
+function dropC4(board, col, sym) {
+  for (let r=5; r>=0; r--) { if (!board[r][col]) { board[r][col]=sym; return r; } } return -1;
+}
+function checkC4(board) {
+  for (let r=0; r<6; r++) for (let c=0; c<7; c++) {
+    const s=board[r][c]; if (!s) continue;
+    if (c+3<7&&board[r][c+1]===s&&board[r][c+2]===s&&board[r][c+3]===s) return true;
+    if (r+3<6&&board[r+1][c]===s&&board[r+2][c]===s&&board[r+3][c]===s) return true;
+    if (r+3<6&&c+3<7&&board[r+1][c+1]===s&&board[r+2][c+2]===s&&board[r+3][c+3]===s) return true;
+    if (r+3<6&&c-3>=0&&board[r+1][c-1]===s&&board[r+2][c-2]===s&&board[r+3][c-3]===s) return true;
+  }
+  return false;
+}
+function buildC4Embed(g, status) {
+  return new EmbedBuilder().setColor('#FEE75C').setTitle('🔴 Connect 4 🟡')
+    .setDescription(`<@${g.player1}> 🔴 vs 🟡 <@${g.player2}>\n\n${g.board.map(r=>r.map(c=>c||'⚫').join('')).join('\n')}\n\n${status}`).setTimestamp();
+}
+const buildC4Rows = (disabled) => [new ActionRowBuilder().addComponents(
+  ...[0,1,2,3,4,5,6].map(c => new ButtonBuilder().setCustomId(`c4:${c}`).setLabel(`${c+1}`).setStyle(ButtonStyle.Primary).setDisabled(disabled))
+)];
+
+// ─── Blackjack Helpers ────────────────────────────────────────────────────────
+const SUITS=['♠','♥','♦','♣'], RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+function makeDeck() {
+  const d=[]; for (const s of SUITS) for (const r of RANKS) d.push({s,r});
+  for (let i=d.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[d[i],d[j]]=[d[j],d[i]];}
+  return d;
+}
+const drawCard = (d) => d.pop();
+const cardVal  = (c) => c.r==='A'?11:['J','Q','K'].includes(c.r)?10:parseInt(c.r);
+function handValue(hand) {
+  let v=hand.reduce((a,c)=>a+cardVal(c),0), aces=hand.filter(c=>c.r==='A').length;
+  while(v>21&&aces>0){v-=10;aces--;}return v;
+}
+const fmtHand = (h) => h.map(c=>`${c.r}${c.s}`).join(' ');
+const buildBJEmbed = (g) => new EmbedBuilder().setColor('#FEE75C').setTitle('🃏 Blackjack')
+  .setDescription(`**Your hand:** ${fmtHand(g.playerHand)} (${handValue(g.playerHand)})\n**Dealer shows:** ${fmtHand([g.dealerHand[0]])} + 🂠\n\nBet: **${g.bet} coins**`).setTimestamp();
+const buildBJRows = () => [new ActionRowBuilder().addComponents(
+  new ButtonBuilder().setCustomId('bj:hit').setLabel('👊 Hit').setStyle(ButtonStyle.Primary),
+  new ButtonBuilder().setCustomId('bj:stand').setLabel('✋ Stand').setStyle(ButtonStyle.Secondary),
+)];
+
+// ─── Mines Helpers ────────────────────────────────────────────────────────────
+function buildMinesRows(game, disabled, reveal=false) {
+  const rows = [];
+  for (let r=0;r<5;r++) {
+    const row = new ActionRowBuilder();
+    for (let c=0;c<5;c++) {
+      const idx=r*5+c, isMine=game.mines.includes(idx), isRev=game.revealed[idx];
+      let label='❓', style=ButtonStyle.Secondary;
+      if (isRev) {label='💎';style=ButtonStyle.Success;}
+      if (reveal&&isMine) {label='💣';style=ButtonStyle.Danger;}
+      row.addComponents(new ButtonBuilder().setCustomId(`mines:tile:${idx}`).setLabel(label).setStyle(style).setDisabled(disabled||isRev));
+    }
+    rows.push(row);
+  }
+  rows.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('mines:cashout')
+      .setLabel(`💰 Cash Out (${(game.bet*game.multiplier).toFixed(0)} coins)`)
+      .setStyle(ButtonStyle.Success).setDisabled(disabled||game.found===0)
+  ));
+  return rows;
+}
+
+// ─── Hangman Data ─────────────────────────────────────────────────────────────
+const HM_WORDS = ['javascript','discord','programming','keyboard','elephant','midnight','rainbow','adventure','telescope','butterfly','champion','universe','developer','algorithm','database'];
+const HM_STAGES = [
+  '```\n  +---+\n  |   |\n      |\n      |\n      |\n      |\n=========```',
+  '```\n  +---+\n  |   |\n  O   |\n      |\n      |\n      |\n=========```',
+  '```\n  +---+\n  |   |\n  O   |\n  |   |\n      |\n      |\n=========```',
+  '```\n  +---+\n  |   |\n  O   |\n /|   |\n      |\n      |\n=========```',
+  '```\n  +---+\n  |   |\n  O   |\n /|\\  |\n      |\n      |\n=========```',
+  '```\n  +---+\n  |   |\n  O   |\n /|\\  |\n /    |\n      |\n=========```',
+  '```\n  +---+\n  |   |\n  O   |\n /|\\  |\n / \\  |\n      |\n=========```',
+];
+
+// ─── Trivia Data ──────────────────────────────────────────────────────────────
+const TRIVIA = [
+  {q:'What is the capital of France?',          a:'paris',         c:['London','Paris','Berlin','Madrid']},
+  {q:'How many sides does a hexagon have?',      a:'6',             c:['5','6','7','8']},
+  {q:'Which planet is called the Red Planet?',  a:'mars',          c:['Venus','Mars','Jupiter','Saturn']},
+  {q:'What is the largest ocean on Earth?',     a:'pacific',       c:['Atlantic','Indian','Pacific','Arctic']},
+  {q:'What gas do plants absorb?',              a:'carbon dioxide', c:['Oxygen','Nitrogen','Carbon Dioxide','Hydrogen']},
+  {q:'Who wrote Romeo and Juliet?',             a:'shakespeare',   c:['Dickens','Shakespeare','Austen','Twain']},
+  {q:'What is 12 × 12?',                        a:'144',           c:['124','136','144','156']},
+  {q:'Chemical symbol for gold?',               a:'au',            c:['Go','Gd','Au','Ag']},
+  {q:'How many continents are there?',          a:'7',             c:['5','6','7','8']},
+  {q:'Fastest land animal?',                    a:'cheetah',       c:['Lion','Horse','Cheetah','Falcon']},
+];
+
+// ─── Wordle Words ─────────────────────────────────────────────────────────────
+const WORDLE_WORDS = ['apple','brave','crane','drive','eagle','flame','grace','happy','image','joker','knife','lemon','magic','night','ocean','piano','queen','river','stone','tiger','uncle','vivid','water','xenon','yacht','zebra'];
+
+function evaluateWordle(guess, word) {
+  const res = Array(5).fill(null).map((_,i) => ({l:guess[i], e:'⬛'}));
+  const wa  = word.split('');
+  for (let i=0;i<5;i++) if (guess[i]===word[i]) {res[i].e='🟩';wa[i]=null;}
+  for (let i=0;i<5;i++) {
+    if (res[i].e==='🟩') continue;
+    const idx=wa.indexOf(guess[i]);
+    if (idx!==-1) {res[i].e='🟨';wa[idx]=null;}
+  }
+  return res;
+}
+
+// ─── Interaction Handler ──────────────────────────────────────────────────────
 client.on('interactionCreate', async (interaction) => {
 
-  // ── Open Ticket Button ──────────────────────────────────────────────────────
+  // Open Ticket
   if (interaction.isButton() && interaction.customId === 'open_ticket') {
-    const guild   = interaction.guild;
-    const member  = interaction.member;
-    const cfg     = getTicketSettings(guild.id);
-
-    // Check if user already has an open ticket
-    const existing = Object.entries(openTickets).find(
-      ([, t]) => t.userId === member.id && t.guildId === guild.id
-    );
-    if (existing) {
-      return interaction.reply({
-        embeds: [errorEmbed(`You already have an open ticket: <#${existing[0]}>`)],
-        ephemeral: true,
-      });
-    }
-
-    // Defer immediately — creating channels + setting permissions can exceed the 3s limit
-    await interaction.deferReply({ ephemeral: true });
-
-    // Find or create the Tickets category and place it at position 0 (top)
-    let category = guild.channels.cache.find(
-      (c) => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === 'tickets'
-    );
-    if (!category) {
-      category = await guild.channels.create({
-        name    : 'Tickets',
-        type    : ChannelType.GuildCategory,
-        position: 0,
-      });
-    } else {
-      // Move existing category to top if it isn't already
-      if (category.position !== 0) await category.setPosition(0).catch(() => {});
-    }
-
-    // Resolve channel name (replace {username} placeholder)
-    const chName = cfg.channelName.replace('{username}', member.user.username.toLowerCase().replace(/[^a-z0-9-]/g, ''));
-
-    // Create a private ticket channel
-    const ticketChannel = await guild.channels.create({
-      name: chName,
-      type: ChannelType.GuildText,
-      parent: category.id,
-      permissionOverwrites: [
-        {
-          id  : guild.roles.everyone,
-          deny: [PermissionsBitField.Flags.ViewChannel],
-        },
-        {
-          id   : member.id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages,
-            PermissionsBitField.Flags.ReadMessageHistory,
-          ],
-        },
-        {
-          id   : guild.members.me.id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages,
-            PermissionsBitField.Flags.ReadMessageHistory,
-            PermissionsBitField.Flags.ManageChannels,
-          ],
-        },
-      ],
-    });
-
-    // Give access to all staff roles (Manage Guild)
-    const modRoles = guild.roles.cache.filter(
-      (r) => r.permissions.has(PermissionsBitField.Flags.ManageGuild) && r.id !== guild.id
-    );
-    for (const [, role] of modRoles) {
-      await ticketChannel.permissionOverwrites.edit(role, {
-        ViewChannel      : true,
-        SendMessages     : true,
-        ReadMessageHistory: true,
-      });
-    }
-
-    openTickets[ticketChannel.id] = { userId: member.id, guildId: guild.id };
-
-    // Inside-ticket welcome message
-    const closeRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('close_ticket')
-        .setLabel('🔒 Close Ticket')
-        .setStyle(ButtonStyle.Danger)
-    );
-
-    const insideDesc = cfg.insideDesc.replace('{mention}', member.toString());
-
-    await ticketChannel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor('#5865F2')
-          .setTitle(cfg.insideTitle)
-          .setDescription(insideDesc)
-          .setFooter({ text: 'Click the button below to close this ticket.' })
-          .setTimestamp(),
-      ],
-      components: [closeRow],
-    });
-
-    await interaction.editReply({
-      embeds: [successEmbed('Ticket Created', `Your ticket has been opened: ${ticketChannel}`)],
-    });
-    return; // prevent fall-through to welcome/close handlers
+    const {guild, member} = interaction;
+    const cfg = getTicketSettings(guild.id);
+    const existing = Object.entries(openTickets).find(([,t])=>t.userId===member.id&&t.guildId===guild.id);
+    if (existing) return interaction.reply({embeds:[errorEmbed(`Ticket already open: <#${existing[0]}>`)],ephemeral:true});
+    await interaction.deferReply({ephemeral:true});
+    let cat = guild.channels.cache.find(c=>c.type===ChannelType.GuildCategory&&c.name.toLowerCase()==='tickets');
+    if (!cat) cat = await guild.channels.create({name:'Tickets',type:ChannelType.GuildCategory,position:0});
+    const chName = cfg.channelName.replace('{username}',member.user.username.toLowerCase().replace(/[^a-z0-9-]/g,''));
+    const tc = await guild.channels.create({name:chName,type:ChannelType.GuildText,parent:cat.id,
+      permissionOverwrites:[
+        {id:guild.roles.everyone,deny:[PermissionsBitField.Flags.ViewChannel]},
+        {id:member.id,allow:[PermissionsBitField.Flags.ViewChannel,PermissionsBitField.Flags.SendMessages,PermissionsBitField.Flags.ReadMessageHistory]},
+        {id:guild.members.me.id,allow:[PermissionsBitField.Flags.ViewChannel,PermissionsBitField.Flags.SendMessages,PermissionsBitField.Flags.ReadMessageHistory,PermissionsBitField.Flags.ManageChannels]},
+      ]});
+    const mods = guild.roles.cache.filter(r=>r.permissions.has(PermissionsBitField.Flags.ManageGuild)&&r.id!==guild.id);
+    for (const [,role] of mods) await tc.permissionOverwrites.edit(role,{ViewChannel:true,SendMessages:true,ReadMessageHistory:true});
+    openTickets[tc.id] = {userId:member.id,guildId:guild.id};
+    await tc.send({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(cfg.insideTitle).setDescription(cfg.insideDesc.replace('{mention}',member.toString())).setFooter({text:'Click below to close.'}).setTimestamp()],
+      components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_ticket').setLabel('🔒 Close Ticket').setStyle(ButtonStyle.Danger))]});
+    await interaction.editReply({embeds:[successEmbed('Ticket Created',`Opened: ${tc}`)]});
+    return;
   }
 
-  // ── Close Ticket Button ─────────────────────────────────────────────────────
+  // Close Ticket
   if (interaction.isButton() && interaction.customId === 'close_ticket') {
-    const channel = interaction.channel;
-    const guild   = interaction.guild;
-    const member  = interaction.member;
-
-    const ticketData = openTickets[channel.id];
-    const isStaff    = member.permissions.has(PermissionsBitField.Flags.ManageGuild);
-    const isOwner    = ticketData?.userId === member.id;
-
-    if (!ticketData) {
-      return interaction.reply({ embeds: [errorEmbed('This is not a ticket channel.')], ephemeral: true });
-    }
-    if (!isOwner && !isStaff) {
-      return interaction.reply({ embeds: [errorEmbed('Only the ticket owner or staff can close this ticket.')], ephemeral: true });
-    }
-
-    await interaction.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor('#ED4245')
-          .setTitle('🔒 Ticket Closing')
-          .setDescription(`Ticket closed by ${member}. This channel will be deleted in **5 seconds**.`)
-          .setTimestamp(),
-      ],
-    });
-
-    delete openTickets[channel.id];
-    setTimeout(async () => { await channel.delete().catch(() => {}); }, 5000);
-    return; // prevent fall-through to welcome handlers
+    const td = openTickets[interaction.channel.id];
+    if (!td) return interaction.reply({embeds:[errorEmbed('Not a ticket channel.')],ephemeral:true});
+    const isStaff = interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild);
+    if (td.userId !== interaction.user.id && !isStaff) return interaction.reply({embeds:[errorEmbed('Only ticket owner or staff can close this.')],ephemeral:true});
+    await interaction.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔒 Closing').setDescription(`Closed by ${interaction.member}. Deleting in 5 seconds.`).setTimestamp()]});
+    delete openTickets[interaction.channel.id];
+    setTimeout(() => interaction.channel.delete().catch(()=>{}), 5000);
+    return;
   }
 
-  // ── Welcome Setup Button / Select Interactions ─────────────────────────────
+  // TTT
+  if (interaction.isButton() && interaction.customId.startsWith('ttt:')) {
+    const game = tttGames[interaction.channel.id];
+    if (!game) return interaction.reply({content:'❌ No active TTT game.',ephemeral:true});
+    if (interaction.user.id !== game.currentPlayer) return interaction.reply({content:'❌ Not your turn!',ephemeral:true});
+    const idx = parseInt(interaction.customId.split(':')[1]);
+    if (game.board[idx]) return interaction.reply({content:'❌ Cell taken.',ephemeral:true});
+    game.board[idx] = game.symbol;
+    const win  = checkTTT(game.board);
+    const full = game.board.every(c=>c!==null);
+    if (win) { delete tttGames[interaction.channel.id]; return interaction.update({embeds:[buildTTTEmbed(game,`🎉 <@${interaction.user.id}> wins!`)],components:buildTTTRows(game.board,true)}); }
+    if (full){ delete tttGames[interaction.channel.id]; return interaction.update({embeds:[buildTTTEmbed(game,"🤝 Draw!")],components:buildTTTRows(game.board,true)}); }
+    game.currentPlayer = game.currentPlayer===game.player1 ? game.player2 : game.player1;
+    game.symbol = game.symbol==='❌' ? '⭕' : '❌';
+    return interaction.update({embeds:[buildTTTEmbed(game,`<@${game.currentPlayer}>'s turn (${game.symbol})`)],components:buildTTTRows(game.board,false)});
+  }
 
+  // Mines
+  if (interaction.isButton() && interaction.customId.startsWith('mines:')) {
+    const [,action,idxStr] = interaction.customId.split(':');
+    const game = minesGames[interaction.user.id];
+    if (!game) return interaction.reply({content:'❌ No mines game. Use `!mines` to start.',ephemeral:true});
+    if (interaction.user.id !== game.userId) return interaction.reply({content:'❌ Not your game.',ephemeral:true});
+    if (action === 'cashout') {
+      const win = (game.bet * game.multiplier).toFixed(0);
+      delete minesGames[interaction.user.id];
+      return interaction.update({embeds:[successEmbed('💰 Cashed Out!',`You won **${win} coins** at **${game.multiplier}x**!\nGems found: **${game.found}**`)],components:buildMinesRows(game,true)});
+    }
+    const idx = parseInt(idxStr);
+    if (game.revealed[idx]) return interaction.reply({content:'❌ Already revealed.',ephemeral:true});
+    game.revealed[idx] = true;
+    if (game.mines.includes(idx)) {
+      delete minesGames[interaction.user.id];
+      return interaction.update({embeds:[errorEmbed(`💥 BOOM! You hit a mine and lost **${game.bet} coins**!`)],components:buildMinesRows(game,true,true)});
+    }
+    game.found++; game.multiplier = parseFloat((1+game.found*0.5).toFixed(2));
+    return interaction.update({embeds:[infoEmbed('💎 Mines',`Gems: **${game.found}** | Multiplier: **${game.multiplier}x**\nPotential: **${(game.bet*game.multiplier).toFixed(0)} coins**`)],components:buildMinesRows(game,false)});
+  }
+
+  // Connect4
+  if (interaction.isButton() && interaction.customId.startsWith('c4:')) {
+    const game = c4Games[interaction.channel.id];
+    if (!game) return interaction.reply({content:'❌ No active game.',ephemeral:true});
+    if (interaction.user.id !== game.currentPlayer) return interaction.reply({content:'❌ Not your turn!',ephemeral:true});
+    const col = parseInt(interaction.customId.split(':')[1]);
+    if (dropC4(game.board,col,game.symbol) === -1) return interaction.reply({content:'❌ Column full!',ephemeral:true});
+    const win  = checkC4(game.board);
+    const full = game.board[0].every(c=>c!==null);
+    if (win) { delete c4Games[interaction.channel.id]; return interaction.update({embeds:[buildC4Embed(game,`🎉 <@${interaction.user.id}> wins!`)],components:buildC4Rows(true)}); }
+    if (full){ delete c4Games[interaction.channel.id]; return interaction.update({embeds:[buildC4Embed(game,"🤝 Draw!")],components:buildC4Rows(true)}); }
+    game.currentPlayer = game.currentPlayer===game.player1?game.player2:game.player1;
+    game.symbol = game.symbol==='🔴'?'🟡':'🔴';
+    return interaction.update({embeds:[buildC4Embed(game,`<@${game.currentPlayer}>'s turn (${game.symbol})`)],components:buildC4Rows(false)});
+  }
+
+  // Blackjack
+  if (interaction.isButton() && interaction.customId.startsWith('bj:')) {
+    const action = interaction.customId.split(':')[1];
+    const game   = bjGames[interaction.user.id];
+    if (!game) return interaction.reply({content:'❌ No active blackjack game.',ephemeral:true});
+    if (action === 'hit') {
+      game.playerHand.push(drawCard(game.deck));
+      const pv = handValue(game.playerHand);
+      if (pv > 21) { delete bjGames[interaction.user.id]; return interaction.update({embeds:[errorEmbed(`💥 Bust! Over 21 — lost **${game.bet} coins**.\nHand: ${fmtHand(game.playerHand)} (${pv})`)],components:[]}); }
+      return interaction.update({embeds:[buildBJEmbed(game)],components:buildBJRows()});
+    }
+    if (action === 'stand') {
+      while (handValue(game.dealerHand)<17) game.dealerHand.push(drawCard(game.deck));
+      const pv=handValue(game.playerHand), dv=handValue(game.dealerHand);
+      const result = dv>21||pv>dv ? `🎉 You win **${game.bet*2} coins**!` : pv===dv ? `🤝 Push — **${game.bet} coins** back.` : `😞 Dealer wins. Lost **${game.bet} coins**.`;
+      delete bjGames[interaction.user.id];
+      return interaction.update({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🃏 Blackjack — Result')
+        .setDescription(`**Your hand:** ${fmtHand(game.playerHand)} (${pv})\n**Dealer:** ${fmtHand(game.dealerHand)} (${dv})\n\n${result}`).setTimestamp()],components:[]});
+    }
+  }
+
+  // Welcome Panel Buttons
   if (!interaction.isButton() && !interaction.isStringSelectMenu()) return;
-
-  const customId = interaction.customId || '';
-  if (!customId.startsWith('welcome:')) return;
-
-  // Only Manage Guild members may use these controls
-  if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-    return interaction.reply({ embeds: [errorEmbed('You need **Manage Server** permission.')], ephemeral: true });
-  }
-
-  const action = customId.split(':')[1];
+  if (!interaction.customId?.startsWith('welcome:')) return;
+  if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild))
+    return interaction.reply({embeds:[errorEmbed('Need **Manage Server** permission.')],ephemeral:true});
+  const action = interaction.customId.split(':')[1];
   const wcfg   = getWelcomeSettings(interaction.guild.id);
-
-  // Helper: refresh the main control panel after a setting changes
-  async function refreshPanel() {
-    const panelMsg = welcomePanelMessages[interaction.guild.id];
-    if (panelMsg) {
-      await panelMsg.edit({
-        embeds    : [buildWelcomePanel(interaction.guild, wcfg)],
-        components: buildWelcomeRows(wcfg),
-      }).catch(() => {});
-    }
+  const refreshPanel = async () => {
+    const pm = welcomePanelMessages[interaction.guild.id];
+    if (pm) await pm.edit({embeds:[buildWelcomePanel(interaction.guild,wcfg)],components:buildWelcomeRows(wcfg)}).catch(()=>{});
+  };
+  const collectText = (prompt, ms, cb) => {
+    interaction.reply({embeds:[prompt],ephemeral:true});
+    const col = interaction.channel.createMessageCollector({filter:m=>m.author.id===interaction.user.id,time:ms,max:1});
+    col.on('collect', async m => { const v=m.content; m.delete().catch(()=>{}); if(v.toLowerCase()==='cancel') return interaction.editReply({embeds:[errorEmbed('Cancelled.')],components:[]}); await cb(v); });
+    col.on('end', c => { if(!c.size) interaction.editReply({embeds:[errorEmbed('Timed out.')],components:[]}).catch(()=>{}); });
+  };
+  if (action==='toggle')    { wcfg.enabled=!wcfg.enabled; return interaction.update({embeds:[buildWelcomePanel(interaction.guild,wcfg)],components:buildWelcomeRows(wcfg)}); }
+  if (action==='mode')      { wcfg.mode=wcfg.mode==='embed'?'text':'embed'; return interaction.update({embeds:[buildWelcomePanel(interaction.guild,wcfg)],components:buildWelcomeRows(wcfg)}); }
+  if (action==='thumbnail') { wcfg.thumbnail=!wcfg.thumbnail; return interaction.update({embeds:[buildWelcomePanel(interaction.guild,wcfg)],components:buildWelcomeRows(wcfg)}); }
+  if (action==='channel')   { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('📢 Set Channel').setDescription('Mention the channel or type `cancel`.'),60000,async v=>{const ch=interaction.guild.channels.cache.find(c=>v.includes(c.id));if(!ch||ch.type!==ChannelType.GuildText)return interaction.editReply({embeds:[errorEmbed('Invalid channel.')],components:[]});wcfg.channelId=ch.id;await interaction.editReply({embeds:[successEmbed('Channel Set',`<#${ch.id}>`)],components:[]});await refreshPanel();}); return; }
+  if (action==='title')     { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('📝 Set Title').setDescription(`Current: \`${wcfg.title}\``),120000,async v=>{if(v.length>256)return interaction.editReply({embeds:[errorEmbed('Max 256 chars.')],components:[]});wcfg.title=v;await interaction.editReply({embeds:[successEmbed('Updated',`\`${v}\``)],components:[]});await refreshPanel();}); return; }
+  if (action==='description'){ collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('📝 Set Description').setDescription('Type new description or `cancel`.'),180000,async v=>{if(v.length>4096)return interaction.editReply({embeds:[errorEmbed('Max 4096 chars.')],components:[]});wcfg.description=v;await interaction.editReply({embeds:[successEmbed('Updated','Saved.')],components:[]});await refreshPanel();}); return; }
+  if (action==='color')     { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('🎨 Set Color').setDescription('Type hex like `#FF5733` or `cancel`.'),60000,async v=>{if(!/^#[0-9A-Fa-f]{6}$/.test(v.trim()))return interaction.editReply({embeds:[errorEmbed('Use `#RRGGBB` format.')],components:[]});wcfg.color=v.trim();await interaction.editReply({embeds:[successEmbed('Updated',v.trim())],components:[]});await refreshPanel();}); return; }
+  if (action==='footer')    { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('📄 Set Footer').setDescription('Type footer or `none` to remove. Type `cancel` to abort.'),120000,async v=>{wcfg.footer=v.toLowerCase()==='none'?'':v;await interaction.editReply({embeds:[successEmbed('Updated',wcfg.footer||'Removed.')],components:[]});await refreshPanel();}); return; }
+  if (action==='text')      { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('💬 Set Text').setDescription('Type plain text message or `cancel`.'),180000,async v=>{if(v.length>2000)return interaction.editReply({embeds:[errorEmbed('Max 2000 chars.')],components:[]});wcfg.text=v;await interaction.editReply({embeds:[successEmbed('Updated','Saved.')],components:[]});await refreshPanel();}); return; }
+  if (action==='deletafter'){ collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('⏱️ Auto-Delete').setDescription('Seconds before welcome is deleted. `0` = never.'),60000,async v=>{const s=parseInt(v);if(isNaN(s)||s<0)return interaction.editReply({embeds:[errorEmbed('Enter valid seconds.')],components:[]});wcfg.deleteAfter=s;await interaction.editReply({embeds:[successEmbed('Set',s===0?'Never.': `${s}s`)],components:[]});await refreshPanel();}); return; }
+  if (action==='preview') {
+    const m=interaction.member;
+    if (wcfg.mode==='embed') {
+      const e=new EmbedBuilder().setColor(wcfg.color||'#57F287').setTitle(resolvePlaceholders(wcfg.title,m)).setDescription(resolvePlaceholders(wcfg.description,m)).setTimestamp();
+      if(wcfg.thumbnail) e.setThumbnail(m.user.displayAvatarURL({forceStatic:false}));
+      if(wcfg.footer)    e.setFooter({text:resolvePlaceholders(wcfg.footer,m)});
+      return interaction.reply({embeds:[e],ephemeral:true});
+    } return interaction.reply({content:resolvePlaceholders(wcfg.text,m),ephemeral:true});
   }
-
-  // Helper: collect one text reply from the user
-  function collectText(promptEmbed, timeMs, callback) {
-    interaction.reply({ embeds: [promptEmbed], ephemeral: true });
-    const collector = interaction.channel.createMessageCollector({
-      filter: m => m.author.id === interaction.user.id && m.channel.id === interaction.channel.id,
-      time: timeMs,
-      max: 1,
-    });
-    collector.on('collect', async m => {
-      const val = m.content;
-      m.delete().catch(() => {});
-      if (val.toLowerCase() === 'cancel') {
-        return interaction.editReply({ embeds: [errorEmbed('Cancelled.')], components: [] });
-      }
-      await callback(val);
-    });
-    collector.on('end', collected => {
-      if (!collected.size) interaction.editReply({ embeds: [errorEmbed('Timed out. Run `!welcomeset` again.')], components: [] }).catch(() => {});
-    });
-  }
-
-  // ── Toggle enable ────────────────────────────────────────────────────────────
-  if (action === 'toggle') {
-    wcfg.enabled = !wcfg.enabled;
-    return interaction.update({
-      embeds    : [buildWelcomePanel(interaction.guild, wcfg)],
-      components: buildWelcomeRows(wcfg),
-    });
-  }
-
-  // ── Toggle mode (embed / text) ───────────────────────────────────────────────
-  if (action === 'mode') {
-    wcfg.mode = wcfg.mode === 'embed' ? 'text' : 'embed';
-    return interaction.update({
-      embeds    : [buildWelcomePanel(interaction.guild, wcfg)],
-      components: buildWelcomeRows(wcfg),
-    });
-  }
-
-  // ── Toggle thumbnail ─────────────────────────────────────────────────────────
-  if (action === 'thumbnail') {
-    wcfg.thumbnail = !wcfg.thumbnail;
-    return interaction.update({
-      embeds    : [buildWelcomePanel(interaction.guild, wcfg)],
-      components: buildWelcomeRows(wcfg),
-    });
-  }
-
-  // ── Set channel ──────────────────────────────────────────────────────────────
-  if (action === 'channel') {
-    const prompt = new EmbedBuilder()
-      .setColor('#FEE75C').setTitle('📢 Set Welcome Channel')
-      .setDescription('Mention the channel you want (e.g. #welcome).\nType `cancel` to abort.')
-      .setTimestamp();
-    collectText(prompt, 60000, async val => {
-      const ch = interaction.guild.channels.cache.find(c => val.includes(c.id));
-      if (!ch || ch.type !== ChannelType.GuildText) {
-        return interaction.editReply({ embeds: [errorEmbed('Invalid channel. Mention a text channel.')], components: [] });
-      }
-      wcfg.channelId = ch.id;
-      await interaction.editReply({ embeds: [successEmbed('Channel Set', `Welcome channel set to <#${ch.id}>.`)], components: [] });
-      await refreshPanel();
-    });
-    return;
-  }
-
-  // ── Set title ────────────────────────────────────────────────────────────────
-  if (action === 'title') {
-    const prompt = new EmbedBuilder()
-      .setColor('#FEE75C').setTitle('📝 Set Embed Title')
-      .setDescription(`**Current:** \`${wcfg.title}\`\n\nType the new title. Placeholders: \`{user}\` \`{username}\` \`{server}\` \`{count}\`\nType \`cancel\` to abort.`)
-      .setTimestamp();
-    collectText(prompt, 120000, async val => {
-      if (val.length > 256) return interaction.editReply({ embeds: [errorEmbed('Title must be 256 chars or less.')], components: [] });
-      wcfg.title = val;
-      await interaction.editReply({ embeds: [successEmbed('Title Updated', `\`${wcfg.title}\``)], components: [] });
-      await refreshPanel();
-    });
-    return;
-  }
-
-  // ── Set description ──────────────────────────────────────────────────────────
-  if (action === 'description') {
-    const prompt = new EmbedBuilder()
-      .setColor('#FEE75C').setTitle('📝 Set Embed Description')
-      .setDescription(`**Current:**\n\`\`\`${wcfg.description.slice(0, 900)}\`\`\`\nPlaceholders: \`{user}\` \`{username}\` \`{server}\` \`{count}\`\nType \`cancel\` to abort.`)
-      .setTimestamp();
-    collectText(prompt, 180000, async val => {
-      if (val.length > 4096) return interaction.editReply({ embeds: [errorEmbed('Description must be 4096 chars or less.')], components: [] });
-      wcfg.description = val;
-      await interaction.editReply({ embeds: [successEmbed('Description Updated', 'Embed description saved.')], components: [] });
-      await refreshPanel();
-    });
-    return;
-  }
-
-  // ── Set colour ───────────────────────────────────────────────────────────────
-  if (action === 'color') {
-    const prompt = new EmbedBuilder()
-      .setColor('#FEE75C').setTitle('🎨 Set Embed Color')
-      .setDescription(`**Current:** \`${wcfg.color}\`\n\nType a hex colour like \`#FF5733\`.\nType \`cancel\` to abort.`)
-      .setTimestamp();
-    collectText(prompt, 60000, async val => {
-      if (!/^#[0-9A-Fa-f]{6}$/.test(val.trim())) {
-        return interaction.editReply({ embeds: [errorEmbed('Invalid colour. Use format `#RRGGBB` e.g. `#FF5733`.')], components: [] });
-      }
-      wcfg.color = val.trim();
-      await interaction.editReply({ embeds: [successEmbed('Color Updated', `Colour set to \`${wcfg.color}\`.`)], components: [] });
-      await refreshPanel();
-    });
-    return;
-  }
-
-  // ── Set footer ───────────────────────────────────────────────────────────────
-  if (action === 'footer') {
-    const prompt = new EmbedBuilder()
-      .setColor('#FEE75C').setTitle('📄 Set Embed Footer')
-      .setDescription(`**Current:** \`${wcfg.footer || '(none)'}\`\n\nType the footer text or \`none\` to remove it.\nPlaceholders work here too. Type \`cancel\` to abort.`)
-      .setTimestamp();
-    collectText(prompt, 120000, async val => {
-      wcfg.footer = val.toLowerCase() === 'none' ? '' : val;
-      await interaction.editReply({ embeds: [successEmbed('Footer Updated', wcfg.footer ? `\`${wcfg.footer}\`` : 'Footer removed.')], components: [] });
-      await refreshPanel();
-    });
-    return;
-  }
-
-  // ── Set plain text message ────────────────────────────────────────────────────
-  if (action === 'text') {
-    const prompt = new EmbedBuilder()
-      .setColor('#FEE75C').setTitle('💬 Set Plain Text Message')
-      .setDescription(`**Current:**\n\`\`\`${wcfg.text.slice(0, 900)}\`\`\`\nPlaceholders: \`{user}\` \`{username}\` \`{server}\` \`{count}\`\nType \`cancel\` to abort.`)
-      .setTimestamp();
-    collectText(prompt, 180000, async val => {
-      if (val.length > 2000) return interaction.editReply({ embeds: [errorEmbed('Message must be 2000 chars or less.')], components: [] });
-      wcfg.text = val;
-      await interaction.editReply({ embeds: [successEmbed('Text Message Updated', 'Plain text message saved.')], components: [] });
-      await refreshPanel();
-    });
-    return;
-  }
-
-  // ── Set auto-delete time ──────────────────────────────────────────────────────
-  if (action === 'deletafter') {
-    const prompt = new EmbedBuilder()
-      .setColor('#FEE75C').setTitle('⏱️ Set Auto-Delete Time')
-      .setDescription(`**Current:** \`${wcfg.deleteAfter > 0 ? wcfg.deleteAfter + 's' : 'Never'}\`\n\nType the number of **seconds** before the welcome message is deleted.\n\`0\` = never delete. Type \`cancel\` to abort.`)
-      .setTimestamp();
-    collectText(prompt, 60000, async val => {
-      const secs = parseInt(val);
-      if (isNaN(secs) || secs < 0) return interaction.editReply({ embeds: [errorEmbed('Enter a valid number of seconds (0 = never).')], components: [] });
-      wcfg.deleteAfter = secs;
-      await interaction.editReply({
-        embeds: [successEmbed('Auto-Delete Set', secs === 0 ? 'Welcome messages will **never** be deleted.' : `Welcome messages will be deleted after **${secs}s**.`)],
-        components: [],
-      });
-      await refreshPanel();
-    });
-    return;
-  }
-
-  // ── Preview ──────────────────────────────────────────────────────────────────
-  if (action === 'preview') {
-    const member = interaction.member;
-    if (wcfg.mode === 'embed') {
-      const embed = new EmbedBuilder()
-        .setColor(wcfg.color || '#57F287')
-        .setTitle(resolvePlaceholders(wcfg.title, member))
-        .setDescription(resolvePlaceholders(wcfg.description, member))
-        .setTimestamp();
-      if (wcfg.thumbnail) embed.setThumbnail(member.user.displayAvatarURL({ forceStatic: false }));
-      if (wcfg.footer)    embed.setFooter({ text: resolvePlaceholders(wcfg.footer, member) });
-      return interaction.reply({ embeds: [embed], ephemeral: true });
-    } else {
-      return interaction.reply({ content: resolvePlaceholders(wcfg.text, member), ephemeral: true });
-    }
-  }
-
-  // ── Reset to defaults ─────────────────────────────────────────────────────────
-  if (action === 'reset') {
-    delete welcomeSettings[interaction.guild.id];
-    const fresh = getWelcomeSettings(interaction.guild.id);
-    return interaction.update({
-      embeds    : [buildWelcomePanel(interaction.guild, fresh)],
-      components: buildWelcomeRows(fresh),
-    });
-  }
-
+  if (action==='reset') { delete welcomeSettings[interaction.guild.id]; const f=getWelcomeSettings(interaction.guild.id); return interaction.update({embeds:[buildWelcomePanel(interaction.guild,f)],components:buildWelcomeRows(f)}); }
 });
 
 // ─── Message Handler ──────────────────────────────────────────────────────────
-
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
 
-  // ── Ticket Setup Wizard Collector ─────────────────────────────────────────
+  // Ticket wizard
   const session = setupSessions[message.author.id];
   if (session && message.channel.id === session.channelId) {
     const input = message.content.trim();
-
-    // Cancel wizard
-    if (input.toLowerCase() === 'cancel') {
-      delete setupSessions[message.author.id];
-      return message.reply({ embeds: [errorEmbed('Ticket setup wizard cancelled. No changes were saved.')] });
-    }
-
-    const step  = session.steps[session.step];
-
-    if (input.toLowerCase() !== 'skip') {
-      // Validate input
-      const valid = step.validate(input);
-      if (typeof valid === 'string') {
-        return message.reply(`❌ ${valid} Please try again.`);
-      }
+    if (input.toLowerCase()==='cancel') { delete setupSessions[message.author.id]; return message.reply({embeds:[errorEmbed('Setup cancelled.')]}); }
+    const step = session.steps[session.step];
+    if (input.toLowerCase()!=='skip') {
+      const v = step.validate(input);
+      if (typeof v==='string') return message.reply(`❌ ${v} Try again.`);
       session.draft[step.key] = input;
     }
-
     session.step++;
-
-    // More steps remaining?
     if (session.step < session.steps.length) {
-      const nextStep = session.steps[session.step];
-      // Update hint with current draft value so user sees live progress
-      nextStep.hint = `Current: ${session.draft[nextStep.key]}`;
-      const embed = new EmbedBuilder()
-        .setColor('#FEE75C')
-        .setTitle('⚙️ Ticket Setup Wizard')
-        .setDescription(`${nextStep.question}\n\n${nextStep.hint}`)
-        .setFooter({ text: 'Type your answer below • Type "skip" to keep current value • Type "cancel" to stop' })
-        .setTimestamp();
-      return message.reply({ embeds: [embed] });
+      const ns = session.steps[session.step];
+      return message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('⚙️ Ticket Setup')
+        .setDescription(`${ns.question}\n\nCurrent: \`${session.draft[ns.key]}\``)
+        .setFooter({text:'"skip" to keep • "cancel" to stop'}).setTimestamp()]});
     }
-
-    // All steps done — save and show summary
-    const cfg = getTicketSettings(session.guildId);
-    Object.assign(cfg, session.draft);
+    Object.assign(getTicketSettings(session.guildId), session.draft);
     delete setupSessions[message.author.id];
-
-    const summaryEmbed = new EmbedBuilder()
-      .setColor('#57F287')
-      .setTitle('✅ Ticket Setup Complete!')
-      .setDescription('All settings have been saved. Run `!ticket` to send a fresh panel.')
-      .addFields(
-        { name: '📋 Panel Title',          value: cfg.panelTitle,   inline: false },
-        { name: '📝 Panel Description',    value: cfg.panelDesc,    inline: false },
-        { name: '🔘 Button Label',         value: cfg.buttonLabel,  inline: true  },
-        { name: '📁 Channel Name',         value: cfg.channelName,  inline: true  },
-        { name: '🎫 Inside Ticket Title',  value: cfg.insideTitle,  inline: false },
-        { name: '💬 Inside Ticket Message',value: cfg.insideDesc,   inline: false },
-      )
-      .setTimestamp();
-
-    return message.reply({ embeds: [summaryEmbed] });
+    return message.reply({embeds:[successEmbed('Setup Complete!','All settings saved. Use `!ticket` to send the panel.')]});
   }
-  // FIX: If we were in a wizard session above, we've already returned.
-  // This guard must come AFTER the wizard block so wizard input never
-  // falls through into the command switch below.
+
+  // Hangman guess
+  const hmGame = hangmanGames[message.channel.id];
+  if (hmGame && hmGame.userId===message.author.id && !message.content.startsWith(PREFIX)) {
+    const g = message.content.trim().toLowerCase();
+    if (g.length===1 && /[a-z]/.test(g)) {
+      if (hmGame.guessed.includes(g)) return message.reply('❌ Already guessed!');
+      hmGame.guessed.push(g);
+      if (!hmGame.word.includes(g)) hmGame.wrong++;
+      const disp = hmGame.word.split('').map(l=>hmGame.guessed.includes(l)?l:'_').join(' ');
+      const won=!disp.includes('_'), lost=hmGame.wrong>=6;
+      if (won||lost) delete hangmanGames[message.channel.id];
+      return message.reply({embeds:[new EmbedBuilder().setColor(won?'#57F287':lost?'#ED4245':'#5865F2')
+        .setTitle(`🪓 Hangman${won?' — You Won! 🎉':lost?' — Game Over! 💀':''}`)
+        .setDescription(`${HM_STAGES[hmGame.wrong]}\n**Word:** \`${disp}\`\nWrong: ${hmGame.guessed.filter(x=>!hmGame.word.includes(x)).join(', ')||'none'} (${hmGame.wrong}/6)${lost?`\n\nWord: **${hmGame.word}**`:''}`)
+        .setTimestamp()]});
+    }
+  }
+
+  // Trivia answer
+  const tvGame = triviaGames[message.channel.id];
+  if (tvGame && tvGame.userId===message.author.id && !message.content.startsWith(PREFIX)) {
+    const g=message.content.trim().toLowerCase(), correct=tvGame.q.a;
+    const ok=g===correct||g===tvGame.q.c.find(c=>c.toLowerCase()===correct)?.toLowerCase();
+    delete triviaGames[message.channel.id];
+    return message.reply({embeds:[new EmbedBuilder().setColor(ok?'#57F287':'#ED4245').setTitle(ok?'✅ Correct!':'❌ Wrong!')
+      .setDescription(ok?'🎉 Well done!':`The answer was: **${tvGame.q.c.find(c=>c.toLowerCase()===correct)}**`).setTimestamp()]});
+  }
+
+  // Number guess
+  const ngGame = guessGames[message.channel.id];
+  if (ngGame && ngGame.userId===message.author.id && !message.content.startsWith(PREFIX)) {
+    const n=parseInt(message.content.trim()); if(isNaN(n)) return;
+    ngGame.attempts++;
+    if (n===ngGame.number) { delete guessGames[message.channel.id]; return message.reply({embeds:[successEmbed('🎯 Correct!',`Number was **${ngGame.number}**! Got it in **${ngGame.attempts}** attempt(s)!`)]}); }
+    const hint = n<ngGame.number?'📈 Too low!':'📉 Too high!';
+    if (ngGame.attempts>=7) { delete guessGames[message.channel.id]; return message.reply({embeds:[errorEmbed(`Out of attempts! Number was **${ngGame.number}**.`)]}); }
+    return message.reply({embeds:[infoEmbed('🔢 Guess',`${hint} Attempts: **${ngGame.attempts}/7**`)]});
+  }
+
+  // Wordle guess
+  const wlGame = wordleGames[message.channel.id];
+  if (wlGame && wlGame.userId===message.author.id && !message.content.startsWith(PREFIX)) {
+    const g=message.content.trim().toLowerCase();
+    if (g.length!==5||!/^[a-z]+$/.test(g)) return message.reply('❌ Type a valid 5-letter word!');
+    const result=evaluateWordle(g,wlGame.word);
+    wlGame.guesses.push({g,result});
+    const won=g===wlGame.word, lost=wlGame.guesses.length>=6&&!won;
+    if (won||lost) delete wordleGames[message.channel.id];
+    const board=wlGame.guesses.map(x=>x.result.map(r=>r.e).join('')).join('\n');
+    return message.reply({embeds:[new EmbedBuilder().setColor(won?'#538D4E':lost?'#ED4245':'#5865F2')
+      .setTitle(`🟩 Wordle${won?' — Won! 🎉':lost?` — Over! Word: **${wlGame.word}**`:` — Guess ${wlGame.guesses.length}/6`}`)
+      .setDescription(board).setFooter({text:won||lost?'Game over!':'Type next guess!'}).setTimestamp()]});
+  }
+
   if (!message.content.startsWith(PREFIX)) return;
-
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-  const command = args.shift().toLowerCase();
+  const cmd  = args.shift().toLowerCase();
 
-  switch (command) {
+  switch (cmd) {
 
-    // ── !help ────────────────────────────────────────────────────────────────
-    case 'help':
-    case 'h': {
-      const embed = new EmbedBuilder()
-        .setColor('#5865F2')
-        .setTitle('📚 Multipurpose Bot Commands')
-        .setDescription(`Prefix: \`${PREFIX}\``)
+    // ── !help ───────────────────────────────────────────────────────────────
+    case 'help': case 'h': {
+      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('📚 Bot Commands').setDescription(`Prefix: \`${PREFIX}\``)
         .addFields(
-          {
-            name: '🛡️ Moderation',
-            value: [
-              `\`${PREFIX}kick <@user> [reason]\` — Kick a member`,
-              `\`${PREFIX}ban <@user> [reason]\` — Ban a member`,
-              `\`${PREFIX}unban <userID>\` — Unban a user`,
-              `\`${PREFIX}mute <@user> [duration] [reason]\` — Timeout a member (e.g. 10m, 1h, 1d)`,
-              `\`${PREFIX}unmute <@user>\` — Remove timeout`,
-              `\`${PREFIX}warn <@user> <reason>\` — Warn a member`,
-              `\`${PREFIX}warnings <@user>\` — View warnings`,
-              `\`${PREFIX}clearwarnings <@user>\` — Clear warnings`,
-              `\`${PREFIX}slowmode <seconds>\` — Set slowmode (0 to disable)`,
-              `\`${PREFIX}lock\` — Lock the current channel`,
-              `\`${PREFIX}unlock\` — Unlock the current channel`,
-            ].join('\n'),
-          },
-          {
-            name: '🗑️ Message Management',
-            value: [
-              `\`${PREFIX}purge <amount>\` — Delete up to 100 messages`,
-              `\`${PREFIX}purgeuser <@user> <amount>\` — Delete messages from a specific user`,
-            ].join('\n'),
-          },
-          {
-            name: '📩 DM',
-            value: [
-              `\`${PREFIX}dm <@user> <message>\` — Send a DM to a user`,
-              `\`${PREFIX}dmall <message>\` — DM all server members (admin only)`,
-              `\`${PREFIX}announce <#channel> <message>\` — Send an announcement embed`,
-            ].join('\n'),
-          },
-          {
-            name: '📊 Info',
-            value: [
-              `\`${PREFIX}userinfo [@user]\` — Info about a user`,
-              `\`${PREFIX}serverinfo\` — Info about the server`,
-              `\`${PREFIX}botinfo\` — Info about the bot`,
-              `\`${PREFIX}ping\` — Bot latency`,
-              `\`${PREFIX}avatar [@user]\` — Get a user's avatar`,
-              `\`${PREFIX}roleinfo <rolename>\` — Info about a role`,
-            ].join('\n'),
-          },
-          {
-            name: '🎉 Fun / Utility',
-            value: [
-              `\`${PREFIX}say <message>\` — Make the bot say something`,
-              `\`${PREFIX}embed <title> | <description>\` — Send a custom embed`,
-              `\`${PREFIX}poll <question>\` — Create a yes/no poll`,
-              `\`${PREFIX}roll [sides]\` — Roll a dice`,
-              `\`${PREFIX}coinflip\` — Flip a coin`,
-            ].join('\n'),
-          },
-          {
-            name: '🎫 Ticket System',
-            value: [
-              `\`${PREFIX}ticket\` — Send the ticket panel with Open Ticket button (Manage Server)`,
-              `\`${PREFIX}ticketset\` — Launch interactive setup wizard (set everything step by step)`,
-              `\`${PREFIX}ticketreset\` — Reset all ticket settings to defaults`,
-            ].join('\n'),
-          },
-          {
-            name: '🎉 Welcome System',
-            value: [
-              `\`${PREFIX}welcomeset\` — Open the welcome control panel (full button UI)`,
-              `\`${PREFIX}welcometest\` — Fire a test welcome message to your configured channel`,
-            ].join('\n'),
-          },
-          {
-            name: '🎭 Status Slideshow (Bot Owner Only)',
-            value: [
-              `\`${PREFIX}addstatus <type> <text>\` — Add a status (types: playing, watching, listening, competing)`,
-              `\`${PREFIX}removestatus <number>\` — Remove a status by its number`,
-              `\`${PREFIX}liststatus\` — View all current statuses`,
-              `\`${PREFIX}clearstatus\` — Remove all statuses`,
-            ].join('\n'),
-          }
-        )
-        .setFooter({ text: `${client.user.tag || client.user.username} • Multipurpose Bot` });
-
-      message.reply({ embeds: [embed] });
+          {name:'🛡️ Moderation', value:`\`kick\` \`ban\` \`unban\` \`mute\` \`unmute\` \`warn\` \`warnings\` \`clearwarnings\` \`slowmode\` \`lock\` \`unlock\``},
+          {name:'🗑️ Messages',   value:`\`purge\` \`purgeuser\``},
+          {name:'📊 Info',       value:`\`userinfo\` \`serverinfo\` \`botinfo\` \`ping\` \`avatar\` \`roleinfo\` \`profile\``},
+          {name:'📩 DM',         value:`\`dm\` \`dmall\` \`announce\``},
+          {name:'😂 Fun',        value:`\`meme\` \`joke\` \`8ball\` \`ship\` \`fight\` \`slap\` \`hug\` \`kiss\` \`pat\` \`coinflip\` \`roll\` \`gay\` \`iq\` \`rizz\` \`aura\` \`simp\` \`drip\` \`sus\``},
+          {name:'🎮 Games',      value:`\`ttt\` \`hangman\` \`trivia\` \`guess\` \`rps\` \`blackjack\` \`slots\` \`mines\` \`connect4\` \`wordle\``},
+          {name:'🎫 Tickets',    value:`\`ticket\` \`ticketset\` \`ticketreset\``},
+          {name:'🎉 Welcome',    value:`\`welcomeset\` \`welcometest\``},
+          {name:'🛠️ Utility',   value:`\`say\` \`embed\` \`poll\``},
+          {name:'🎭 Status',     value:`\`addstatus\` \`removestatus\` \`liststatus\` \`clearstatus\``},
+        ).setFooter({text:`${client.user.tag||client.user.username} • All commands use prefix ${PREFIX}`})]});
       break;
     }
 
-    // ── !ping ────────────────────────────────────────────────────────────────
+    // ── !ping ───────────────────────────────────────────────────────────────
     case 'ping': {
-      const sent = await message.reply('Pinging...');
-      sent.edit(`🏓 Pong! Latency: **${sent.createdTimestamp - message.createdTimestamp}ms** | API: **${client.ws.ping}ms**`);
+      const s = await message.reply('Pinging...');
+      s.edit(`🏓 Pong! Latency: **${s.createdTimestamp-message.createdTimestamp}ms** | API: **${client.ws.ping}ms**`);
       break;
     }
 
-    // ── !kick ────────────────────────────────────────────────────────────────
+    // ── !kick ───────────────────────────────────────────────────────────────
     case 'kick': {
-      if (!message.member.permissions.has(PermissionFlagsBits.KickMembers))
-        return missingPerm(message, 'Kick Members');
-      if (!message.guild.members.me.permissions.has(PermissionFlagsBits.KickMembers))
-        return botMissingPerm(message, 'Kick Members');
-
-      const target = message.mentions.members.first();
-      if (!target) return message.reply('❌ Please mention a member to kick.');
-      if (!target.kickable) return message.reply('❌ I cannot kick this member (higher role or owner).');
-
-      const reason = args.slice(1).join(' ') || 'No reason provided';
-      await target.kick(reason);
-      message.reply({ embeds: [successEmbed('Member Kicked', `**${(target.user.tag || target.user.username)}** was kicked.\n**Reason:** ${reason}`)] });
+      if (!message.member.permissions.has(PermissionFlagsBits.KickMembers)) return missingPerm(message,'Kick Members');
+      if (!message.guild.members.me.permissions.has(PermissionFlagsBits.KickMembers)) return botMissingPerm(message,'Kick Members');
+      const t=message.mentions.members.first(); if(!t) return message.reply('❌ Mention a member.');
+      if (!t.kickable) return message.reply('❌ Cannot kick this member.');
+      const reason=args.slice(1).join(' ')||'No reason provided';
+      await t.kick(reason);
+      message.reply({embeds:[successEmbed('Member Kicked',`**${t.user.tag||t.user.username}** kicked.\n**Reason:** ${reason}`)]});
       break;
     }
 
-    // ── !ban ─────────────────────────────────────────────────────────────────
+    // ── !ban ────────────────────────────────────────────────────────────────
     case 'ban': {
-      if (!message.member.permissions.has(PermissionFlagsBits.BanMembers))
-        return missingPerm(message, 'Ban Members');
-      if (!message.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
-        return botMissingPerm(message, 'Ban Members');
-
-      const target = message.mentions.members.first();
-      if (!target) return message.reply('❌ Please mention a member to ban.');
-      if (!target.bannable) return message.reply('❌ I cannot ban this member.');
-
-      const reason = args.slice(1).join(' ') || 'No reason provided';
-      // FIXED: deleteMessageDays deprecated in v14, use deleteMessageSeconds
-      await target.ban({ reason, deleteMessageSeconds: 86400 });
-      message.reply({ embeds: [successEmbed('Member Banned', `**${(target.user.tag || target.user.username)}** was banned.\n**Reason:** ${reason}`)] });
+      if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return missingPerm(message,'Ban Members');
+      if (!message.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers)) return botMissingPerm(message,'Ban Members');
+      const t=message.mentions.members.first(); if(!t) return message.reply('❌ Mention a member.');
+      if (!t.bannable) return message.reply('❌ Cannot ban this member.');
+      const reason=args.slice(1).join(' ')||'No reason provided';
+      await t.ban({reason,deleteMessageSeconds:86400});
+      message.reply({embeds:[successEmbed('Member Banned',`**${t.user.tag||t.user.username}** banned.\n**Reason:** ${reason}`)]});
       break;
     }
 
-    // ── !unban ───────────────────────────────────────────────────────────────
+    // ── !unban ──────────────────────────────────────────────────────────────
     case 'unban': {
-      if (!message.member.permissions.has(PermissionFlagsBits.BanMembers))
-        return missingPerm(message, 'Ban Members');
-
-      const userId = args[0];
-      if (!userId) return message.reply('❌ Provide a user ID to unban.\nUsage: `!unban <userID>`');
-
-      try {
-        await message.guild.members.unban(userId);
-        message.reply({ embeds: [successEmbed('Member Unbanned', `User \`${userId}\` was unbanned.`)] });
-      } catch {
-        message.reply({ embeds: [errorEmbed('Could not unban that user. Make sure the ID is correct.')] });
-      }
+      if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) return missingPerm(message,'Ban Members');
+      const uid=args[0]; if(!uid) return message.reply('❌ Provide a user ID.');
+      try { await message.guild.members.unban(uid); message.reply({embeds:[successEmbed('Unbanned',`\`${uid}\` unbanned.`)]}); }
+      catch { message.reply({embeds:[errorEmbed('Could not unban. Check the ID.')]}); }
       break;
     }
 
-    // ── !mute (timeout) ──────────────────────────────────────────────────────
-    case 'mute':
-    case 'timeout': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return missingPerm(message, 'Moderate Members');
-      if (!message.guild.members.me.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return botMissingPerm(message, 'Moderate Members');
-
-      const target = message.mentions.members.first();
-      if (!target) return message.reply('❌ Please mention a member to mute.');
-
-      // FIXED: args[0] is the mention, so duration is args[1] and reason starts at args[2]
-      let duration = parseDuration(args[1]);
-      let reason;
-      if (duration) {
-        reason = args.slice(2).join(' ') || 'No reason provided';
-      } else {
-        duration = 10 * 60 * 1000;
-        reason = args.slice(1).join(' ') || 'No reason provided';
-      }
-
-      const maxDuration = 28 * 24 * 60 * 60 * 1000;
-      if (duration > maxDuration) return message.reply('❌ Duration cannot exceed 28 days.');
-
-      try {
-        await target.timeout(duration, reason);
-        message.reply({
-          embeds: [successEmbed('Member Muted', `**${(target.user.tag || target.user.username)}** has been timed out for **${formatDuration(duration)}**.\n**Reason:** ${reason}`)],
-        });
-      } catch (err) {
-        message.reply({ embeds: [errorEmbed(`Failed to mute: ${err.message}`)] });
-      }
+    // ── !mute ───────────────────────────────────────────────────────────────
+    case 'mute': case 'timeout': {
+      if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return missingPerm(message,'Moderate Members');
+      if (!message.guild.members.me.permissions.has(PermissionFlagsBits.ModerateMembers)) return botMissingPerm(message,'Moderate Members');
+      const t=message.mentions.members.first(); if(!t) return message.reply('❌ Mention a member.');
+      let dur=parseDuration(args[1]), reason;
+      if(dur){reason=args.slice(2).join(' ')||'No reason';}else{dur=600000;reason=args.slice(1).join(' ')||'No reason';}
+      if(dur>28*86400000) return message.reply('❌ Max 28 days.');
+      try { await t.timeout(dur,reason); message.reply({embeds:[successEmbed('Muted',`**${t.user.tag||t.user.username}** timed out for **${formatDuration(dur)}**.\n**Reason:** ${reason}`)]}); }
+      catch(e){ message.reply({embeds:[errorEmbed(e.message)]}); }
       break;
     }
 
-    // ── !unmute ──────────────────────────────────────────────────────────────
-    case 'unmute':
-    case 'untimeout': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return missingPerm(message, 'Moderate Members');
-
-      const target = message.mentions.members.first();
-      if (!target) return message.reply('❌ Please mention a member to unmute.');
-
-      try {
-        await target.timeout(null);
-        message.reply({ embeds: [successEmbed('Member Unmuted', `**${(target.user.tag || target.user.username)}**'s timeout has been removed.`)] });
-      } catch (err) {
-        message.reply({ embeds: [errorEmbed(`Failed to unmute: ${err.message}`)] });
-      }
+    // ── !unmute ─────────────────────────────────────────────────────────────
+    case 'unmute': case 'untimeout': {
+      if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return missingPerm(message,'Moderate Members');
+      const t=message.mentions.members.first(); if(!t) return message.reply('❌ Mention a member.');
+      try { await t.timeout(null); message.reply({embeds:[successEmbed('Unmuted',`**${t.user.tag||t.user.username}** timeout removed.`)]}); }
+      catch(e){ message.reply({embeds:[errorEmbed(e.message)]}); }
       break;
     }
 
-    // ── !warn ────────────────────────────────────────────────────────────────
+    // ── !warn ───────────────────────────────────────────────────────────────
     case 'warn': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return missingPerm(message, 'Moderate Members');
-
-      const target = message.mentions.members.first();
-      if (!target) return message.reply('❌ Please mention a member to warn.');
-
-      // FIXED: args[0] is the mention, reason starts at args[1]
-      const reason = args.slice(1).join(' ');
-      if (!reason) return message.reply('❌ Provide a reason for the warning.');
-
-      if (!client.warnings) client.warnings = {};
-      if (!client.warnings[message.guild.id]) client.warnings[message.guild.id] = {};
-      if (!client.warnings[message.guild.id][target.id]) client.warnings[message.guild.id][target.id] = [];
-
-      client.warnings[message.guild.id][target.id].push({
-        reason,
-        moderator: message.author.tag || message.author.username,
-        timestamp: new Date().toISOString(),
-      });
-
-      const count = client.warnings[message.guild.id][target.id].length;
-
-      try {
-        await target.send({
-          embeds: [new EmbedBuilder()
-            .setColor('#FEE75C')
-            .setTitle(`⚠️ You were warned in ${message.guild.name}`)
-            .setDescription(`**Reason:** ${reason}\n**Moderator:** ${message.author.tag || message.author.username}\n**Warning #${count}**`)
-            .setTimestamp()],
-        });
-      } catch { /* DMs disabled */ }
-
-      message.reply({
-        embeds: [successEmbed('Member Warned', `**${(target.user.tag || target.user.username)}** has been warned. (Warning #${count})\n**Reason:** ${reason}`)],
-      });
+      if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return missingPerm(message,'Moderate Members');
+      const t=message.mentions.members.first(); if(!t) return message.reply('❌ Mention a member.');
+      const reason=args.slice(1).join(' '); if(!reason) return message.reply('❌ Provide a reason.');
+      if(!client.warnings) client.warnings={};
+      if(!client.warnings[message.guild.id]) client.warnings[message.guild.id]={};
+      if(!client.warnings[message.guild.id][t.id]) client.warnings[message.guild.id][t.id]=[];
+      client.warnings[message.guild.id][t.id].push({reason,mod:message.author.tag||message.author.username,ts:new Date().toISOString()});
+      const cnt=client.warnings[message.guild.id][t.id].length;
+      try { await t.send({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle(`⚠️ Warned in ${message.guild.name}`).setDescription(`**Reason:** ${reason}\n**Warning #${cnt}**`).setTimestamp()]}); } catch{}
+      message.reply({embeds:[successEmbed('Warned',`**${t.user.tag||t.user.username}** warned (#${cnt}).\n**Reason:** ${reason}`)]});
       break;
     }
 
-    // ── !warnings ────────────────────────────────────────────────────────────
+    // ── !warnings ───────────────────────────────────────────────────────────
     case 'warnings': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return missingPerm(message, 'Moderate Members');
-
-      const target = message.mentions.members.first() || message.member;
-      const userWarnings = client.warnings?.[message.guild.id]?.[target.id];
-
-      if (!userWarnings || userWarnings.length === 0) {
-        return message.reply({ embeds: [infoEmbed('⚠️ Warnings', `**${(target.user.tag || target.user.username)}** has no warnings.`)] });
-      }
-
-      const embed = new EmbedBuilder()
-        .setColor('#FEE75C')
-        .setTitle(`⚠️ Warnings for ${(target.user.tag || target.user.username)}`)
-        .setDescription(
-          userWarnings
-            .map((w, i) => `**#${i + 1}** — ${w.reason}\n> by ${w.moderator} • <t:${Math.floor(new Date(w.timestamp).getTime() / 1000)}:R>`)
-            .join('\n\n')
-        )
-        .setFooter({ text: `Total: ${userWarnings.length} warning(s)` })
-        .setTimestamp();
-
-      message.reply({ embeds: [embed] });
+      if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return missingPerm(message,'Moderate Members');
+      const t=message.mentions.members.first()||message.member;
+      const w=client.warnings?.[message.guild.id]?.[t.id];
+      if(!w||!w.length) return message.reply({embeds:[infoEmbed('⚠️ Warnings',`**${t.user.tag||t.user.username}** has no warnings.`)]});
+      message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle(`⚠️ Warnings for ${t.user.tag||t.user.username}`)
+        .setDescription(w.map((x,i)=>`**#${i+1}** — ${x.reason}\n> by ${x.mod}`).join('\n\n'))
+        .setFooter({text:`Total: ${w.length}`}).setTimestamp()]});
       break;
     }
 
-    // ── !clearwarnings ───────────────────────────────────────────────────────
+    // ── !clearwarnings ──────────────────────────────────────────────────────
     case 'clearwarnings': {
-      if (!message.member.permissions.has(PermissionFlagsBits.Administrator))
-        return missingPerm(message, 'Administrator');
-
-      const target = message.mentions.members.first();
-      if (!target) return message.reply('❌ Please mention a member.');
-
-      if (client.warnings?.[message.guild.id]?.[target.id]) {
-        client.warnings[message.guild.id][target.id] = [];
-      }
-      message.reply({ embeds: [successEmbed('Warnings Cleared', `All warnings for **${(target.user.tag || target.user.username)}** have been cleared.`)] });
+      if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return missingPerm(message,'Administrator');
+      const t=message.mentions.members.first(); if(!t) return message.reply('❌ Mention a member.');
+      if(client.warnings?.[message.guild.id]?.[t.id]) client.warnings[message.guild.id][t.id]=[];
+      message.reply({embeds:[successEmbed('Cleared',`All warnings for **${t.user.tag||t.user.username}** cleared.`)]});
       break;
     }
 
-    // ── !slowmode ────────────────────────────────────────────────────────────
+    // ── !slowmode ───────────────────────────────────────────────────────────
     case 'slowmode': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return missingPerm(message, 'Manage Channels');
-
-      const seconds = parseInt(args[0]);
-      if (isNaN(seconds) || seconds < 0 || seconds > 21600)
-        return message.reply('❌ Provide a value between 0 and 21600 seconds.');
-
-      await message.channel.setRateLimitPerUser(seconds);
-      message.reply({
-        embeds: [successEmbed('Slowmode Updated', seconds === 0 ? 'Slowmode has been **disabled**.' : `Slowmode set to **${seconds}s**.`)],
-      });
+      if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return missingPerm(message,'Manage Channels');
+      const s=parseInt(args[0]); if(isNaN(s)||s<0||s>21600) return message.reply('❌ Value must be 0–21600 seconds.');
+      await message.channel.setRateLimitPerUser(s);
+      message.reply({embeds:[successEmbed('Slowmode',s===0?'Disabled.`':'Set to **'+s+'s**.')]});
       break;
     }
 
-    // ── !lock ────────────────────────────────────────────────────────────────
+    // ── !lock ───────────────────────────────────────────────────────────────
     case 'lock': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return missingPerm(message, 'Manage Channels');
-
-      await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, {
-        SendMessages: false,
-      });
-      message.reply({ embeds: [successEmbed('Channel Locked', `🔒 **${message.channel.name}** has been locked.`)] });
+      if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return missingPerm(message,'Manage Channels');
+      await message.channel.permissionOverwrites.edit(message.guild.roles.everyone,{SendMessages:false});
+      message.reply({embeds:[successEmbed('Locked',`🔒 **${message.channel.name}** locked.`)]});
       break;
     }
 
-    // ── !unlock ──────────────────────────────────────────────────────────────
+    // ── !unlock ─────────────────────────────────────────────────────────────
     case 'unlock': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return missingPerm(message, 'Manage Channels');
-
-      await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, {
-        SendMessages: null,
-      });
-      message.reply({ embeds: [successEmbed('Channel Unlocked', `🔓 **${message.channel.name}** has been unlocked.`)] });
+      if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) return missingPerm(message,'Manage Channels');
+      await message.channel.permissionOverwrites.edit(message.guild.roles.everyone,{SendMessages:null});
+      message.reply({embeds:[successEmbed('Unlocked',`🔓 **${message.channel.name}** unlocked.`)]});
       break;
     }
 
-    // ── !purge ───────────────────────────────────────────────────────────────
-    case 'purge':
-    case 'clear': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages))
-        return missingPerm(message, 'Manage Messages');
-      if (!message.guild.members.me.permissions.has(PermissionFlagsBits.ManageMessages))
-        return botMissingPerm(message, 'Manage Messages');
-
-      const amount = parseInt(args[0]);
-      if (isNaN(amount) || amount < 1 || amount > 100)
-        return message.reply('❌ Provide a number between 1 and 100.');
-
+    // ── !purge ──────────────────────────────────────────────────────────────
+    case 'purge': case 'clear': {
+      if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return missingPerm(message,'Manage Messages');
+      if (!message.guild.members.me.permissions.has(PermissionFlagsBits.ManageMessages)) return botMissingPerm(message,'Manage Messages');
+      const n=parseInt(args[0]); if(isNaN(n)||n<1||n>100) return message.reply('❌ Provide a number 1–100.');
       try {
-        const deleted = await message.channel.bulkDelete(amount + 1, true);
-        const reply = await message.channel.send({
-          embeds: [successEmbed('Messages Deleted', `Deleted **${deleted.size - 1}** message(s).`)],
-        });
-        setTimeout(() => reply.delete().catch(() => {}), 4000);
-      } catch (err) {
-        message.reply({ embeds: [errorEmbed(`Failed to delete: ${err.message}`)] });
-      }
+        await message.delete().catch(()=>{});
+        const del=await message.channel.bulkDelete(n,true);
+        const skip=n-del.size;
+        let desc=`Deleted **${del.size}** message(s).`;
+        if(skip>0) desc+=`\n⚠️ **${skip}** skipped (older than 14 days).`;
+        const r=await message.channel.send({embeds:[successEmbed('Deleted',desc)]});
+        setTimeout(()=>r.delete().catch(()=>{}),4000);
+      } catch(e){ message.channel.send({embeds:[errorEmbed(e.message)]}); }
       break;
     }
 
-    // ── !purgeuser ───────────────────────────────────────────────────────────
+    // ── !purgeuser ──────────────────────────────────────────────────────────
     case 'purgeuser': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages))
-        return missingPerm(message, 'Manage Messages');
-
-      const target = message.mentions.users.first();
-      if (!target) return message.reply('❌ Mention a user.');
-
-      const amount = parseInt(args[1]) || 20;
-      if (amount < 1 || amount > 100) return message.reply('❌ Amount must be 1–100.');
-
-      const messages = await message.channel.messages.fetch({ limit: 100 });
-      // FIXED: .first(n) doesn't exist on Collection — use .filter + .toJSON().slice()
-      const toDelete = messages
-        .filter((m) => m.author.id === target.id)
-        .toJSON()
-        .slice(0, amount);
-
-      if (!toDelete.length) return message.reply(`❌ No recent messages found from **${target.tag || target.username}**.`);
-
-      try {
-        await message.channel.bulkDelete(toDelete, true);
-        const reply = await message.channel.send({
-          embeds: [successEmbed('Messages Deleted', `Deleted **${toDelete.length}** message(s) from **${target.tag || target.username}**.`)],
-        });
-        setTimeout(() => reply.delete().catch(() => {}), 4000);
-      } catch (err) {
-        message.reply({ embeds: [errorEmbed(`Failed: ${err.message}`)] });
-      }
+      if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return missingPerm(message,'Manage Messages');
+      const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention a user.');
+      const n=parseInt(args[1])||20; if(n<1||n>100) return message.reply('❌ Amount 1–100.');
+      const msgs=await message.channel.messages.fetch({limit:100});
+      const del=msgs.filter(m=>m.author.id===t.id).toJSON().slice(0,n);
+      if(!del.length) return message.reply(`❌ No messages from **${t.tag||t.username}**.`);
+      try { await message.channel.bulkDelete(del,true); const r=await message.channel.send({embeds:[successEmbed('Deleted',`Deleted **${del.length}** msg(s) from **${t.tag||t.username}**.`)]}); setTimeout(()=>r.delete().catch(()=>{}),4000); }
+      catch(e){ message.reply({embeds:[errorEmbed(e.message)]}); }
       break;
     }
 
-    // ── !dm ──────────────────────────────────────────────────────────────────
+    // ── !dm ─────────────────────────────────────────────────────────────────
     case 'dm': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return missingPerm(message, 'Moderate Members');
-
-      const target = message.mentions.users.first();
-      if (!target) return message.reply('❌ Mention a user to DM.\nUsage: `!dm @user message`');
-      const dmMsg = args.slice(1).join(' ');
-      if (!dmMsg) return message.reply('❌ Provide a message to send.');
-
-      try {
-        await target.send({
-          embeds: [new EmbedBuilder()
-            .setColor('#5865F2')
-            .setTitle(`📩 Message from ${message.guild.name}`)
-            .setDescription(dmMsg)
-            .setFooter({ text: `Sent by ${message.author.tag || message.author.username}` })
-            .setTimestamp()],
-        });
-        message.reply({ embeds: [successEmbed('DM Sent', `Message sent to **${target.tag || target.username}**.`)] });
-      } catch {
-        message.reply({ embeds: [errorEmbed(`Could not DM **${target.tag || target.username}**. Their DMs may be closed.`)] });
-      }
+      if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return missingPerm(message,'Moderate Members');
+      const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention a user.');
+      const txt=args.slice(1).join(' '); if(!txt) return message.reply('❌ Provide a message.');
+      try { await t.send({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`📩 From ${message.guild.name}`).setDescription(txt).setFooter({text:`By ${message.author.tag||message.author.username}`}).setTimestamp()]}); message.reply({embeds:[successEmbed('DM Sent',`Sent to **${t.tag||t.username}**.`)]}); }
+      catch { message.reply({embeds:[errorEmbed(`Cannot DM **${t.tag||t.username}**. DMs closed.`)]}); }
       break;
     }
 
-    // ── !dmall ───────────────────────────────────────────────────────────────
+    // ── !dmall ──────────────────────────────────────────────────────────────
     case 'dmall': {
-      if (!message.member.permissions.has(PermissionFlagsBits.Administrator))
-        return missingPerm(message, 'Administrator');
-
-      const dmMsg = args.join(' ');
-      if (!dmMsg) return message.reply('❌ Provide a message.\nUsage: `!dmall message`');
-
-      const members = await message.guild.members.fetch();
-      const humans = members.filter((m) => !m.user.bot);
-
-      let sent = 0, failed = 0;
-      const progress = await message.reply(`📤 Sending DMs to ${humans.size} members...`);
-
-      // FIXED: 1 second delay between DMs to avoid Discord rate-limiting the bot
-      for (const [, member] of humans) {
-        try {
-          await member.send({
-            embeds: [new EmbedBuilder()
-              .setColor('#5865F2')
-              .setTitle(`📢 Message from ${message.guild.name}`)
-              .setDescription(dmMsg)
-              .setFooter({ text: `Sent by ${message.author.tag || message.author.username}` })
-              .setTimestamp()],
-          });
-          sent++;
-        } catch { failed++; }
-        await sleep(1000);
-      }
-
-      progress.edit({
-        embeds: [infoEmbed('📤 DM All Complete', `✅ Sent: **${sent}**\n❌ Failed: **${failed}** (DMs closed)`)],
-        content: '',
-      });
+      if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return missingPerm(message,'Administrator');
+      const txt=args.join(' '); if(!txt) return message.reply('❌ Provide a message.');
+      const members=await message.guild.members.fetch();
+      const humans=members.filter(m=>!m.user.bot);
+      let sent=0,failed=0;
+      const prog=await message.reply(`📤 DMing ${humans.size} members...`);
+      for(const[,m]of humans){try{await m.send({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`📢 ${message.guild.name}`).setDescription(txt).setTimestamp()]});sent++;}catch{failed++;}await sleep(1000);}
+      prog.edit({embeds:[infoEmbed('DM All Done',`✅ Sent: **${sent}**\n❌ Failed: **${failed}**`)],content:''});
       break;
     }
 
     // ── !announce ────────────────────────────────────────────────────────────
     case 'announce': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild))
-        return missingPerm(message, 'Manage Server');
-
-      const channel = message.mentions.channels.first();
-      if (!channel) return message.reply('❌ Mention a channel.\nUsage: `!announce #channel message`');
-      // args[0] is the channel mention token (#channel), text starts at args[1]
-      const text = args.slice(1).join(' ');
-      if (!text) return message.reply('❌ Provide the announcement text.');
-
-      try {
-        await channel.send({
-          embeds: [new EmbedBuilder()
-            .setColor('#FEE75C')
-            .setTitle('📢 Announcement')
-            .setDescription(text)
-            .setFooter({ text: `Announced by ${message.author.tag || message.author.username}` })
-            .setTimestamp()],
-        });
-        message.reply({ embeds: [successEmbed('Announcement Sent', `Message sent to ${channel}.`)] });
-      } catch {
-        message.reply({ embeds: [errorEmbed(`I cannot send messages in ${channel}.`)] });
-      }
+      if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) return missingPerm(message,'Manage Server');
+      const ch=message.mentions.channels.first(); if(!ch) return message.reply('❌ Mention a channel.');
+      const txt=args.slice(1).join(' '); if(!txt) return message.reply('❌ Provide text.');
+      try { await ch.send({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('📢 Announcement').setDescription(txt).setFooter({text:`By ${message.author.tag||message.author.username}`}).setTimestamp()]}); message.reply({embeds:[successEmbed('Sent',`Announcement sent to ${ch}.`)]}); }
+      catch { message.reply({embeds:[errorEmbed(`Cannot send to ${ch}.`)]}); }
       break;
     }
 
     // ── !userinfo ────────────────────────────────────────────────────────────
-    case 'userinfo':
-    case 'whois': {
-      const target = message.mentions.members.first() || message.member;
-      const user = target.user;
-      const roles = target.roles.cache
-        .filter((r) => r.id !== message.guild.id)
-        .sort((a, b) => b.position - a.position)
-        .map((r) => r.toString())
-        .slice(0, 10)
-        .join(', ') || 'None';
-
-      const embed = new EmbedBuilder()
-        .setColor(target.displayHexColor || '#5865F2')
-        .setTitle(`👤 ${user.tag || user.username}`)
-        .setThumbnail(user.displayAvatarURL({ forceStatic: false, size: 256 }))
+    case 'userinfo': case 'whois': {
+      const t=message.mentions.members.first()||message.member, u=t.user;
+      const roles=t.roles.cache.filter(r=>r.id!==message.guild.id).sort((a,b)=>b.position-a.position).map(r=>r.toString()).slice(0,10).join(', ')||'None';
+      message.reply({embeds:[new EmbedBuilder().setColor(t.displayHexColor||'#5865F2').setTitle(`👤 ${u.tag||u.username}`)
+        .setThumbnail(u.displayAvatarURL({forceStatic:false,size:256}))
         .addFields(
-          { name: '🆔 User ID', value: user.id, inline: true },
-          { name: '🤖 Bot', value: user.bot ? 'Yes' : 'No', inline: true },
-          { name: '📅 Account Created', value: `<t:${Math.floor(user.createdTimestamp / 1000)}:F>`, inline: false },
-          { name: '📥 Joined Server', value: target.joinedAt ? `<t:${Math.floor(target.joinedTimestamp / 1000)}:F>` : 'Unknown', inline: false },
-          { name: `🎭 Roles [${target.roles.cache.size - 1}]`, value: roles },
-          { name: '⭐ Highest Role', value: target.roles.highest.toString(), inline: true },
-          { name: '🔑 Nickname', value: target.nickname || 'None', inline: true },
-        )
-        .setTimestamp();
-
-      message.reply({ embeds: [embed] });
+          {name:'🆔 ID',          value:u.id,inline:true},
+          {name:'🤖 Bot',         value:u.bot?'Yes':'No',inline:true},
+          {name:'📅 Created',     value:`<t:${Math.floor(u.createdTimestamp/1000)}:F>`,inline:false},
+          {name:'📥 Joined',      value:t.joinedAt?`<t:${Math.floor(t.joinedTimestamp/1000)}:F>`:'Unknown',inline:false},
+          {name:`🎭 Roles (${t.roles.cache.size-1})`,value:roles},
+          {name:'⭐ Top Role',    value:t.roles.highest.toString(),inline:true},
+          {name:'🔑 Nickname',    value:t.nickname||'None',inline:true},
+        ).setTimestamp()]});
       break;
     }
 
     // ── !serverinfo ──────────────────────────────────────────────────────────
-    case 'serverinfo':
-    case 'server': {
-      const guild = message.guild;
-      await guild.fetch();
-
-      const embed = new EmbedBuilder()
-        .setColor('#5865F2')
-        .setTitle(`🏠 ${guild.name}`)
-        .setThumbnail(guild.iconURL({ forceStatic: false }))
+    case 'serverinfo': case 'server': {
+      const g=message.guild; await g.fetch();
+      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`🏠 ${g.name}`)
+        .setThumbnail(g.iconURL({forceStatic:false}))
         .addFields(
-          { name: '🆔 Server ID', value: guild.id, inline: true },
-          { name: '👑 Owner', value: `<@${guild.ownerId}>`, inline: true },
-          { name: '👥 Members', value: `${guild.memberCount}`, inline: true },
-          { name: '📅 Created', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:F>`, inline: false },
-          { name: '📢 Channels', value: `${guild.channels.cache.size}`, inline: true },
-          { name: '🎭 Roles', value: `${guild.roles.cache.size}`, inline: true },
-          { name: '😀 Emojis', value: `${guild.emojis.cache.size}`, inline: true },
-          { name: '🔒 Verification Level', value: guild.verificationLevel.toString(), inline: true },
-          { name: '🚀 Boost Level', value: `Level ${guild.premiumTier}`, inline: true },
-          { name: '💎 Boosts', value: `${guild.premiumSubscriptionCount || 0}`, inline: true },
-        )
-        .setTimestamp();
-
-      message.reply({ embeds: [embed] });
+          {name:'🆔 ID',         value:g.id,inline:true},
+          {name:'👑 Owner',      value:`<@${g.ownerId}>`,inline:true},
+          {name:'👥 Members',    value:`${g.memberCount}`,inline:true},
+          {name:'📅 Created',    value:`<t:${Math.floor(g.createdTimestamp/1000)}:F>`,inline:false},
+          {name:'📢 Channels',   value:`${g.channels.cache.size}`,inline:true},
+          {name:'🎭 Roles',      value:`${g.roles.cache.size}`,inline:true},
+          {name:'😀 Emojis',     value:`${g.emojis.cache.size}`,inline:true},
+          {name:'🚀 Boost Lvl',  value:`Level ${g.premiumTier}`,inline:true},
+          {name:'💎 Boosts',     value:`${g.premiumSubscriptionCount||0}`,inline:true},
+        ).setTimestamp()]});
       break;
     }
 
     // ── !botinfo ─────────────────────────────────────────────────────────────
     case 'botinfo': {
-      const uptime = process.uptime();
-      const hours = Math.floor(uptime / 3600);
-      const minutes = Math.floor((uptime % 3600) / 60);
-      const seconds = Math.floor(uptime % 60);
-
-      const embed = new EmbedBuilder()
-        .setColor('#5865F2')
-        .setTitle(`🤖 ${client.user.tag || client.user.username}`)
+      const up=process.uptime(), h=Math.floor(up/3600), m=Math.floor((up%3600)/60), s=Math.floor(up%60);
+      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`🤖 ${client.user.tag||client.user.username}`)
         .setThumbnail(client.user.displayAvatarURL())
         .addFields(
-          { name: '📡 Servers', value: `${client.guilds.cache.size}`, inline: true },
-          { name: '👥 Users', value: `${client.users.cache.size}`, inline: true },
-          { name: '🏓 Ping', value: `${client.ws.ping}ms`, inline: true },
-          { name: '⏱ Uptime', value: `${hours}h ${minutes}m ${seconds}s`, inline: true },
-          { name: '📦 discord.js', value: require('discord.js').version, inline: true },
-          { name: '🟢 Node.js', value: process.version, inline: true },
-        )
-        .setTimestamp();
-
-      message.reply({ embeds: [embed] });
+          {name:'📡 Servers',   value:`${client.guilds.cache.size}`,inline:true},
+          {name:'👥 Users',     value:`${client.users.cache.size}`,inline:true},
+          {name:'🏓 Ping',      value:`${client.ws.ping}ms`,inline:true},
+          {name:'⏱ Uptime',     value:`${h}h ${m}m ${s}s`,inline:true},
+          {name:'📦 discord.js',value:require('discord.js').version,inline:true},
+          {name:'🟢 Node.js',   value:process.version,inline:true},
+        ).setTimestamp()]});
       break;
     }
 
     // ── !avatar ──────────────────────────────────────────────────────────────
-    case 'avatar':
-    case 'pfp': {
-      const target = message.mentions.users.first() || message.author;
-      const embed = new EmbedBuilder()
-        .setColor('#5865F2')
-        .setTitle(`🖼️ ${target.tag || target.username}'s Avatar`)
-        .setImage(target.displayAvatarURL({ forceStatic: false, size: 512 }))
-        .setURL(target.displayAvatarURL({ forceStatic: false, size: 4096 }));
-      message.reply({ embeds: [embed] });
+    case 'avatar': case 'pfp': {
+      const t=message.mentions.users.first()||message.author;
+      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`🖼️ ${t.tag||t.username}'s Avatar`).setImage(t.displayAvatarURL({forceStatic:false,size:512})).setURL(t.displayAvatarURL({forceStatic:false,size:4096}))]});
       break;
     }
 
     // ── !roleinfo ────────────────────────────────────────────────────────────
     case 'roleinfo': {
-      const roleName = args.join(' ');
-      if (!roleName) return message.reply('❌ Provide a role name.\nUsage: `!roleinfo <rolename>`');
-
-      const role = message.guild.roles.cache.find(
-        (r) => r.name.toLowerCase() === roleName.toLowerCase()
-      );
-      if (!role) return message.reply(`❌ Role **${roleName}** not found.`);
-
-      const embed = new EmbedBuilder()
-        .setColor(role.hexColor || '#5865F2')
-        .setTitle(`🎭 ${role.name}`)
+      const rn=args.join(' '); if(!rn) return message.reply('❌ Provide a role name.');
+      const r=message.guild.roles.cache.find(x=>x.name.toLowerCase()===rn.toLowerCase());
+      if(!r) return message.reply(`❌ Role **${rn}** not found.`);
+      message.reply({embeds:[new EmbedBuilder().setColor(r.hexColor||'#5865F2').setTitle(`🎭 ${r.name}`)
         .addFields(
-          { name: '🆔 Role ID', value: role.id, inline: true },
-          { name: '🎨 Color', value: role.hexColor, inline: true },
-          { name: '📅 Created', value: `<t:${Math.floor(role.createdTimestamp / 1000)}:F>`, inline: false },
-          { name: '👥 Members', value: `${role.members.size}`, inline: true },
-          { name: '📌 Hoisted', value: role.hoist ? 'Yes' : 'No', inline: true },
-          { name: '💬 Mentionable', value: role.mentionable ? 'Yes' : 'No', inline: true },
-          { name: '📊 Position', value: `${role.position}`, inline: true },
-        )
-        .setTimestamp();
-
-      message.reply({ embeds: [embed] });
+          {name:'🆔 ID',          value:r.id,inline:true},
+          {name:'🎨 Color',       value:r.hexColor,inline:true},
+          {name:'👥 Members',     value:`${r.members.size}`,inline:true},
+          {name:'📌 Hoisted',     value:r.hoist?'Yes':'No',inline:true},
+          {name:'💬 Mentionable', value:r.mentionable?'Yes':'No',inline:true},
+          {name:'📊 Position',    value:`${r.position}`,inline:true},
+        ).setTimestamp()]});
       break;
     }
 
-    // ── !say ─────────────────────────────────────────────────────────────────
-    case 'say': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages))
-        return missingPerm(message, 'Manage Messages');
+    // ── !profile ─────────────────────────────────────────────────────────────
+    case 'profile': {
+      const t=message.mentions.members.first()||message.member, u=t.user;
+      const badges=[];
+      if(u.bot) badges.push('🤖 Bot');
+      if(t.permissions.has(PermissionFlagsBits.Administrator)) badges.push('🛡️ Admin');
+      if(t.permissions.has(PermissionFlagsBits.ManageGuild)) badges.push('⚙️ Manager');
+      if(message.guild.ownerId===u.id) badges.push('👑 Owner');
+      const joinedDays=Math.floor((Date.now()-t.joinedTimestamp)/86400000);
+      const acctDays=Math.floor((Date.now()-u.createdTimestamp)/86400000);
+      message.reply({embeds:[new EmbedBuilder().setColor(t.displayHexColor||'#5865F2').setTitle(`🪪 ${u.tag||u.username}'s Profile`)
+        .setThumbnail(u.displayAvatarURL({forceStatic:false,size:256}))
+        .addFields(
+          {name:'🆔 User ID',      value:u.id,inline:true},
+          {name:'🎨 Color',        value:t.displayHexColor||'#000',inline:true},
+          {name:'🔑 Nickname',     value:t.nickname||'None',inline:true},
+          {name:'📅 Account Age',  value:`${acctDays} days`,inline:true},
+          {name:'📥 Member For',   value:`${joinedDays} days`,inline:true},
+          {name:'⭐ Top Role',     value:t.roles.highest.toString(),inline:true},
+          {name:`🎭 Roles (${t.roles.cache.size-1})`,value:t.roles.cache.filter(r=>r.id!==message.guild.id).sort((a,b)=>b.position-a.position).map(r=>r.toString()).slice(0,8).join(', ')||'None',inline:false},
+          {name:'🏅 Badges',       value:badges.join('  ')||'None',inline:false},
+        ).setFooter({text:`Requested by ${message.author.tag||message.author.username}`}).setTimestamp()]});
+      break;
+    }
 
-      const text = args.join(' ');
-      if (!text) return message.reply('❌ Provide a message.');
-      await message.delete().catch(() => {});
-      message.channel.send(text);
+    // ── !say (everyone can use) ──────────────────────────────────────────────
+    case 'say': {
+      const txt=args.join(' '); if(!txt) return message.reply('❌ Provide a message.');
+      await message.delete().catch(()=>{});
+      message.channel.send(txt);
       break;
     }
 
     // ── !embed ───────────────────────────────────────────────────────────────
     case 'embed': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages))
-        return missingPerm(message, 'Manage Messages');
-
-      const parts = args.join(' ').split('|');
-      if (parts.length < 2) return message.reply('❌ Usage: `!embed Title | Description`');
-
-      const embed = new EmbedBuilder()
-        .setColor('#5865F2')
-        .setTitle(parts[0].trim())
-        .setDescription(parts[1].trim())
-        .setFooter({ text: `Requested by ${message.author.tag || message.author.username}` })
-        .setTimestamp();
-
-      await message.delete().catch(() => {});
-      message.channel.send({ embeds: [embed] });
+      if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return missingPerm(message,'Manage Messages');
+      const parts=args.join(' ').split('|');
+      if(parts.length<2) return message.reply('❌ Usage: `!embed Title | Description`');
+      await message.delete().catch(()=>{});
+      message.channel.send({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(parts[0].trim()).setDescription(parts[1].trim()).setFooter({text:`By ${message.author.tag||message.author.username}`}).setTimestamp()]});
       break;
     }
 
     // ── !poll ────────────────────────────────────────────────────────────────
     case 'poll': {
-      const question = args.join(' ');
-      if (!question) return message.reply('❌ Provide a question.\nUsage: `!poll <question>`');
-
-      const embed = new EmbedBuilder()
-        .setColor('#FEE75C')
-        .setTitle('📊 Poll')
-        .setDescription(`**${question}**`)
-        .setFooter({ text: `Poll by ${message.author.tag || message.author.username}` })
-        .setTimestamp();
-
-      const poll = await message.channel.send({ embeds: [embed] });
-      await poll.react('✅');
-      await poll.react('❌');
-      await message.delete().catch(() => {});
+      const q=args.join(' '); if(!q) return message.reply('❌ Provide a question.');
+      const poll=await message.channel.send({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('📊 Poll').setDescription(`**${q}**`).setFooter({text:`By ${message.author.tag||message.author.username}`}).setTimestamp()]});
+      await poll.react('✅'); await poll.react('❌');
+      await message.delete().catch(()=>{});
       break;
     }
 
     // ── !roll ────────────────────────────────────────────────────────────────
     case 'roll': {
-      const sides = parseInt(args[0]) || 6;
-      if (sides < 2) return message.reply('❌ Dice must have at least 2 sides.');
-      const result = Math.floor(Math.random() * sides) + 1;
-      message.reply({ embeds: [infoEmbed('🎲 Dice Roll', `You rolled a **d${sides}** and got: **${result}**`)] });
+      const n=parseInt(args[0])||6; if(n<2) return message.reply('❌ At least 2 sides.');
+      message.reply({embeds:[infoEmbed('🎲 Dice Roll',`Rolled a **d${n}** → **${Math.floor(Math.random()*n)+1}**`)]});
       break;
     }
 
     // ── !coinflip ────────────────────────────────────────────────────────────
-    case 'coinflip':
-    case 'coin': {
-      const result = Math.random() < 0.5 ? '🪙 Heads' : '🪙 Tails';
-      message.reply({ embeds: [infoEmbed('Coin Flip', `Result: **${result}**`)] });
+    case 'coinflip': case 'coin':
+      message.reply({embeds:[infoEmbed('🪙 Coin Flip',`Result: **${Math.random()<0.5?'Heads':'Tails'}**`)]});
       break;
-    }
 
-    // ── !ticket (send panel) ────────────────────────────────────────────────
-    case 'ticket': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild))
-        return missingPerm(message, 'Manage Server');
+    // ── FUN COMMANDS ─────────────────────────────────────────────────────────
 
-      const cfg = getTicketSettings(message.guild.id);
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('open_ticket')
-          .setLabel(cfg.buttonLabel)
-          .setStyle(ButtonStyle.Primary)
-      );
-
-      const embed = new EmbedBuilder()
-        .setColor('#5865F2')
-        .setTitle(cfg.panelTitle)
-        .setDescription(cfg.panelDesc)
-        .setFooter({ text: message.guild.name })
-        .setTimestamp();
-
-      await message.channel.send({ embeds: [embed], components: [row] });
-      await message.delete().catch(() => {});
-      break;
-    }
-
-    // ── !ticketset (interactive wizard) ─────────────────────────────────────
-    case 'ticketset': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild))
-        return missingPerm(message, 'Manage Server');
-
-      // Kill any existing wizard for this user
-      if (setupSessions[message.author.id]) {
-        delete setupSessions[message.author.id];
-      }
-
-      const cfg = getTicketSettings(message.guild.id);
-
-      const STEPS = [
-        {
-          key      : 'panelTitle',
-          label    : 'Panel Title',
-          question : '**Step 1/6 — Panel Embed Title**\nWhat should the title of the ticket panel embed be?',
-          hint     : `Current: \`${cfg.panelTitle}\``,
-          validate : (v) => v.length <= 256 || 'Title must be 256 characters or less.',
-        },
-        {
-          key      : 'panelDesc',
-          label    : 'Panel Description',
-          question : '**Step 2/6 — Panel Embed Description**\nWhat should the description of the ticket panel say?',
-          hint     : `Current: ${cfg.panelDesc}`,
-          validate : (v) => v.length <= 4096 || 'Description must be 4096 characters or less.',
-        },
-        {
-          key      : 'buttonLabel',
-          label    : 'Button Label',
-          question : '**Step 3/6 — Open Ticket Button Label**\nWhat should the button say?',
-          hint     : `Current: \`${cfg.buttonLabel}\``,
-          validate : (v) => v.length <= 80 || 'Button label must be 80 characters or less.',
-        },
-        {
-          key      : 'channelName',
-          label    : 'Ticket Channel Name',
-          question : '**Step 4/6 — Ticket Channel Name**\nWhat should new ticket channels be named? Use `{username}` as a placeholder.',
-          hint     : `Current: \`${cfg.channelName}\``,
-          validate : (v) => /^[a-z0-9\-{}_]+$/i.test(v) || 'Only letters, numbers, hyphens, underscores, and `{username}` are allowed.',
-        },
-        {
-          key      : 'insideTitle',
-          label    : 'Inside Ticket Title',
-          question : '**Step 5/6 — Inside Ticket Embed Title**\nWhat should the title of the embed inside the ticket channel be?',
-          hint     : `Current: \`${cfg.insideTitle}\``,
-          validate : (v) => v.length <= 256 || 'Title must be 256 characters or less.',
-        },
-        {
-          key      : 'insideDesc',
-          label    : 'Inside Ticket Message',
-          question : '**Step 6/6 — Inside Ticket Message**\nWhat should the welcome message inside the ticket say? Use `{mention}` to ping the user.',
-          hint     : `Current: ${cfg.insideDesc}`,
-          validate : (v) => v.length <= 4096 || 'Description must be 4096 characters or less.',
-        },
+    case 'meme': {
+      const memes=[
+        {t:'When the code works first try 😱',i:'https://i.imgur.com/UOqFCIW.jpg'},
+        {t:'Me explaining to rubber duck 🦆',i:'https://i.imgur.com/ZSY7108.jpg'},
+        {t:'Debugging at 3am 😵',i:'https://i.imgur.com/nFHUKFi.jpg'},
+        {t:'When someone touches my code 😤',i:'https://i.imgur.com/Qq2K5gD.jpg'},
+        {t:"It works. Don't touch it.",i:'https://i.imgur.com/7pAbWeq.jpg'},
       ];
-
-      // Build the draft config from current values so skips keep current
-      const draft = { ...cfg };
-
-      setupSessions[message.author.id] = {
-        step    : 0,
-        draft,
-        guildId : message.guild.id,
-        channelId: message.channel.id,
-        steps   : STEPS,
-      };
-
-      function buildStepEmbed(stepIdx) {
-        const s = STEPS[stepIdx];
-        return new EmbedBuilder()
-          .setColor('#FEE75C')
-          .setTitle('⚙️ Ticket Setup Wizard')
-          .setDescription(`${s.question}\n\n${s.hint}`)
-          .setFooter({ text: 'Type your answer below • Type "skip" to keep current value • Type "cancel" to stop' })
-          .setTimestamp();
-      }
-
-      await message.reply({ embeds: [buildStepEmbed(0)] });
+      const m=memes[Math.floor(Math.random()*memes.length)];
+      message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle(`😂 ${m.t}`).setImage(m.i).setTimestamp()]});
       break;
     }
 
-    // ── !ticketreset (reset all settings to default) ─────────────────────────
+    case 'joke': {
+      const jokes=[
+        {q:'Why do programmers prefer dark mode?',a:'Because light attracts bugs!'},
+        {q:'Why did the programmer quit?',a:"They didn't get arrays!"},
+        {q:'How many programmers to change a lightbulb?',a:"None. It's a hardware problem."},
+        {q:'Why do Java devs wear glasses?',a:"Because they don't C#!"},
+        {q:"What's a computer's fave snack?",a:'Microchips!'},
+        {q:'Why was the math book sad?',a:'Too many problems.'},
+        {q:'What do you call a bear with no teeth?',a:'A gummy bear!'},
+      ];
+      const j=jokes[Math.floor(Math.random()*jokes.length)];
+      message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('😂 Joke').addFields({name:'❓',value:j.q},{name:'💡 Answer',value:`||${j.a}||`}).setTimestamp()]});
+      break;
+    }
+
+    case '8ball': {
+      const q=args.join(' '); if(!q) return message.reply('❌ Ask a question!');
+      const ans=['🟢 Definitely!','🟢 Yes!','🟢 Without doubt.','🟢 Most likely.','🟡 Ask again later.','🟡 Cannot predict.','🔴 No.','🔴 Very doubtful.','🔴 Absolutely not.'];
+      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🎱 Magic 8-Ball').addFields({name:'❓',value:q},{name:'🎱',value:ans[Math.floor(Math.random()*ans.length)]}).setTimestamp()]});
+      break;
+    }
+
+    case 'ship': {
+      const u1=message.mentions.users.first(), u2=message.mentions.users.toJSON()[1]||message.author;
+      if(!u1) return message.reply('❌ Mention at least one user!');
+      let h=0; for(const c of u1.id+u2.id) h=(h*31+c.charCodeAt(0))>>>0;
+      const love=h%101, bar=meterBar(love);
+      const emoji=love>=80?'💕':love>=50?'💛':love>=30?'🤝':'💔';
+      message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle(`${emoji} Ship`)
+        .setDescription(`**${u1.username}** 💘 **${u2.username}**\n\n\`${bar}\` **${love}%**\n\n${love>=80?'Perfect match! 💑':love>=50?'There\'s potential! 😊':love>=30?'Just friends 🤝':'Not meant to be 💔'}`)
+        .setTimestamp()]});
+      break;
+    }
+
+    case 'fight': {
+      const t=message.mentions.members.first(); if(!t) return message.reply('❌ Mention someone!');
+      const win=Math.random()<0.5?message.member:t, lose=win.id===message.member.id?t:message.member;
+      const moves=['a devastating punch','a spinning kick','a power slam','a critical hit'];
+      message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('⚔️ Fight!')
+        .setDescription(`**${message.author.username}** vs **${t.user.username}**\n\n🥊 **${win.user.username}** lands ${moves[Math.floor(Math.random()*moves.length)]}!\n\n🏆 **${win.user.username}** wins! **${lose.user.username}** is knocked out!`)
+        .setTimestamp()]});
+      break;
+    }
+
+    case 'slap': { const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!'); message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('👋 Slap!').setDescription(`**${message.author.username}** slaps **${t.username}** with a giant trout! 🐟`).setTimestamp()]}); break; }
+    case 'hug':  { const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!'); message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('🤗 Hug!').setDescription(`**${message.author.username}** gives **${t.username}** a warm hug! 💕`).setTimestamp()]}); break; }
+    case 'kiss': { const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!'); message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('😘 Kiss!').setDescription(`**${message.author.username}** gives **${t.username}** a kiss! 💋`).setTimestamp()]}); break; }
+    case 'pat':  { const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!'); message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🫳 Pat!').setDescription(`**${message.author.username}** pats **${t.username}** on the head! ✨`).setTimestamp()]}); break; }
+
+    case 'gay': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'gay'); message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('🏳️‍🌈 Gay Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>80?'✨ Very gay!':v>50?'🌈 Pretty gay!':v>30?'🤔 A little...':'😐 Not really.'}`).setTimestamp()]}); break; }
+    case 'iq':   { const t=message.mentions.members.first()||message.member,v=pct(t.id,'iq')+50; message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🧠 IQ Test').setDescription(`**${t.user.username}**'s IQ: **${v}**\n\n${v>=130?'🎓 Galaxy brain!':v>=110?'😎 Above avg!':v>=90?'😐 Average.':'🥴 Uhh...'}`).setTimestamp()]}); break; }
+    case 'rizz': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'rizz'); message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('😎 Rizz Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'🔥 God-tier rizz!':v>=60?'😏 Solid rizz!':v>=40?'😊 Decent.':'💀 No rizz.'}`).setTimestamp()]}); break; }
+    case 'aura': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'aura')*1000; message.reply({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('✨ Aura Points').setDescription(`**${t.user.username}**: **${v.toLocaleString()} pts**\n\n${v>=80000?'🌟 Legendary!':v>=60000?'💜 Strong!':v>=40000?'🔵 Average.':'⚫ Weak.'}`).setTimestamp()]}); break; }
+    case 'simp': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'simp'); message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('🥺 Simp Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'😭 Certified Simp!':v>=50?'😅 A bit simpy...':v>=30?'🤨 Borderline.':'😎 Not a simp.'}`).setTimestamp()]}); break; }
+    case 'drip': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'drip'); message.reply({embeds:[new EmbedBuilder().setColor('#00BFFF').setTitle('💧 Drip Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'🔥 Absolute drip!':v>=60?'😎 Nice drip!':v>=40?'👕 Basic.':'💀 No drip.'}`).setTimestamp()]}); break; }
+    case 'sus':  { const t=message.mentions.members.first()||message.member,v=pct(t.id,'sus'); message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔴 Sus Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'📮 EJECTED!':v>=60?'🤨 Pretty sus...':v>=40?'🧐 Hmm...':'✅ Not sus.'}`).setTimestamp()]}); break; }
+
+    // ── GAME COMMANDS ────────────────────────────────────────────────────────
+
+    case 'ttt': {
+      const opp=message.mentions.members.first();
+      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
+      if(tttGames[message.channel.id]) return message.reply('❌ Game already running here.');
+      const g={board:Array(9).fill(null),player1:message.author.id,player2:opp.id,currentPlayer:message.author.id,symbol:'❌'};
+      tttGames[message.channel.id]=g;
+      message.reply({embeds:[buildTTTEmbed(g,`<@${message.author.id}>'s turn (❌)`)],components:buildTTTRows(g.board,false)});
+      break;
+    }
+
+    case 'hangman': {
+      if(hangmanGames[message.channel.id]) return message.reply('❌ Hangman already running here!');
+      const word=HM_WORDS[Math.floor(Math.random()*HM_WORDS.length)];
+      hangmanGames[message.channel.id]={word,guessed:[],wrong:0,userId:message.author.id};
+      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🪓 Hangman')
+        .setDescription(`${HM_STAGES[0]}\n**Word:** \`${'_ '.repeat(word.length).trim()}\`\n\nType a **single letter** in chat!`)
+        .setFooter({text:`${word.length} letters • 6 wrong guesses allowed`}).setTimestamp()]});
+      break;
+    }
+
+    case 'trivia': {
+      if(triviaGames[message.channel.id]) return message.reply('❌ Trivia already running!');
+      const q=TRIVIA[Math.floor(Math.random()*TRIVIA.length)];
+      triviaGames[message.channel.id]={q,userId:message.author.id};
+      const choices=q.c.map((c,i)=>`${['🇦','🇧','🇨','🇩'][i]} **${c}**`).join('\n');
+      message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🧠 Trivia').setDescription(`**${q.q}**\n\n${choices}\n\nType your answer!`).setFooter({text:'30 seconds!'}).setTimestamp()]});
+      setTimeout(()=>{if(triviaGames[message.channel.id]){delete triviaGames[message.channel.id];message.channel.send({embeds:[errorEmbed(`Time's up! Answer: **${q.c.find(c=>c.toLowerCase()===q.a)}**`)]}).catch(()=>{});}},30000);
+      break;
+    }
+
+    case 'guess': {
+      if(guessGames[message.channel.id]) return message.reply('❌ Already running!');
+      const n=Math.floor(Math.random()*100)+1;
+      guessGames[message.channel.id]={number:n,attempts:0,userId:message.author.id};
+      message.reply({embeds:[infoEmbed('🔢 Guess the Number','I picked a number **1–100**!\nType your guess. **7 attempts**. 60 seconds!')]});
+      setTimeout(()=>{if(guessGames[message.channel.id]){delete guessGames[message.channel.id];message.channel.send({embeds:[errorEmbed(`Time's up! Number was **${n}**.`)]}).catch(()=>{});}},60000);
+      break;
+    }
+
+    case 'rps': {
+      const map={rock:'🪨',paper:'📄',scissors:'✂️'};
+      const uc=args[0]?.toLowerCase(); if(!map[uc]) return message.reply('❌ Choose `rock`, `paper`, or `scissors`!');
+      const bc=Object.keys(map)[Math.floor(Math.random()*3)];
+      const wins={rock:'scissors',paper:'rock',scissors:'paper'};
+      const res=uc===bc?'🤝 Tie!':wins[uc]===bc?'🎉 You win!':'🤖 I win!';
+      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('✊ RPS').setDescription(`You: **${map[uc]} ${uc}**\nMe: **${map[bc]} ${bc}**\n\n${res}`).setTimestamp()]});
+      break;
+    }
+
+    case 'blackjack': case 'bj': {
+      if(bjGames[message.author.id]) return message.reply('❌ Finish your current game first!');
+      const bet=parseInt(args[0])||50;
+      const deck=makeDeck();
+      const ph=[drawCard(deck),drawCard(deck)], dh=[drawCard(deck),drawCard(deck)];
+      bjGames[message.author.id]={deck,playerHand:ph,dealerHand:dh,bet};
+      if(handValue(ph)===21){delete bjGames[message.author.id];return message.reply({embeds:[successEmbed('🃏 Blackjack! 🎉',`Natural Blackjack! Win **${Math.floor(bet*2.5)} coins**!\nHand: ${fmtHand(ph)}`)]});}
+      message.reply({embeds:[buildBJEmbed(bjGames[message.author.id])],components:buildBJRows()});
+      break;
+    }
+
+    case 'slots': {
+      const now=Date.now();
+      if(slotsCD[message.author.id]&&now-slotsCD[message.author.id]<10000) return message.reply(`❌ Cooldown! Wait **${Math.ceil((10000-(now-slotsCD[message.author.id]))/1000)}s**.`);
+      slotsCD[message.author.id]=now;
+      const syms=['🍒','🍋','🍊','🍇','⭐','💎','7️⃣'], spin=()=>syms[Math.floor(Math.random()*syms.length)];
+      const [s1,s2,s3]=[spin(),spin(),spin()];
+      const won=s1===s2&&s2===s3, jp=won&&s1==='💎';
+      message.reply({embeds:[new EmbedBuilder().setColor(jp?'#FFD700':won?'#57F287':'#ED4245')
+        .setTitle(`🎰 Slots${jp?' — JACKPOT! 🎊':won?' — Winner! 🎉':''}`)
+        .setDescription(`╔══════════╗\n║  ${s1} │ ${s2} │ ${s3}  ║\n╚══════════╝\n\n${jp?'💎 **JACKPOT! 1000 coins!**':won?'🎉 **You win 100 coins!**':'😞 No luck. Try again!'}`)
+        .setTimestamp()]});
+      break;
+    }
+
+    case 'mines': {
+      if(minesGames[message.author.id]) return message.reply('❌ Finish your current mines game first!');
+      const bet=parseInt(args[0])||50, mc=parseInt(args[1])||5;
+      if(mc<1||mc>20) return message.reply('❌ Mines must be 1–20.');
+      const mines=[];
+      while(mines.length<mc){const i=Math.floor(Math.random()*25);if(!mines.includes(i))mines.push(i);}
+      minesGames[message.author.id]={userId:message.author.id,bet,mines,revealed:Array(25).fill(false),found:0,multiplier:1.0};
+      const g=minesGames[message.author.id];
+      message.reply({embeds:[infoEmbed('💎 Mines',`Bet: **${bet} coins** | Mines: **${mc}**\nClick tiles to find gems! Avoid 💣\nCash out anytime!`)],components:buildMinesRows(g,false)});
+      break;
+    }
+
+    case 'connect4': case 'c4': {
+      const opp=message.mentions.members.first();
+      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
+      if(c4Games[message.channel.id]) return message.reply('❌ Game already running here!');
+      const g={board:makeC4Board(),player1:message.author.id,player2:opp.id,currentPlayer:message.author.id,symbol:'🔴'};
+      c4Games[message.channel.id]=g;
+      message.reply({embeds:[buildC4Embed(g,`<@${message.author.id}>'s turn (🔴)`)],components:buildC4Rows(false)});
+      break;
+    }
+
+    case 'wordle': {
+      if(wordleGames[message.channel.id]) return message.reply('❌ Wordle already running here!');
+      const word=WORDLE_WORDS[Math.floor(Math.random()*WORDLE_WORDS.length)];
+      wordleGames[message.channel.id]={word,guesses:[],userId:message.author.id};
+      message.reply({embeds:[new EmbedBuilder().setColor('#538D4E').setTitle('🟩 Wordle')
+        .setDescription('Guess the **5-letter word** in 6 tries!\n\n🟩 Right letter + spot\n🟨 Right letter, wrong spot\n⬛ Wrong letter\n\nType your first guess!')
+        .setFooter({text:'6 guesses'}).setTimestamp()]});
+      break;
+    }
+
+    // ── TICKET & WELCOME ─────────────────────────────────────────────────────
+
+    case 'ticket': {
+      if(!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) return missingPerm(message,'Manage Server');
+      const cfg=getTicketSettings(message.guild.id);
+      await message.channel.send({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(cfg.panelTitle).setDescription(cfg.panelDesc).setFooter({text:message.guild.name}).setTimestamp()],
+        components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('open_ticket').setLabel(cfg.buttonLabel).setStyle(ButtonStyle.Primary))]});
+      await message.delete().catch(()=>{});
+      break;
+    }
+
+    case 'ticketset': {
+      if(!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) return missingPerm(message,'Manage Server');
+      if(setupSessions[message.author.id]) delete setupSessions[message.author.id];
+      const cfg=getTicketSettings(message.guild.id);
+      const STEPS=[
+        {key:'panelTitle', question:'**Step 1/6 — Panel Title**',            validate:v=>v.length<=256||'Max 256 chars.'},
+        {key:'panelDesc',  question:'**Step 2/6 — Panel Description**',       validate:v=>v.length<=4096||'Max 4096 chars.'},
+        {key:'buttonLabel',question:'**Step 3/6 — Button Label**',             validate:v=>v.length<=80||'Max 80 chars.'},
+        {key:'channelName',question:'**Step 4/6 — Channel Name** (`{username}` supported)', validate:v=>/^[a-z0-9\-{}_]+$/i.test(v)||'Letters/numbers/hyphens only.'},
+        {key:'insideTitle',question:'**Step 5/6 — Inside Ticket Title**',      validate:v=>v.length<=256||'Max 256 chars.'},
+        {key:'insideDesc', question:'**Step 6/6 — Inside Ticket Message** (`{mention}` = user ping)', validate:v=>v.length<=4096||'Max 4096 chars.'},
+      ];
+      setupSessions[message.author.id]={step:0,draft:{...cfg},guildId:message.guild.id,channelId:message.channel.id,steps:STEPS};
+      message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('⚙️ Ticket Setup Wizard').setDescription(`${STEPS[0].question}\n\nCurrent: \`${cfg[STEPS[0].key]}\``).setFooter({text:'"skip" to keep • "cancel" to stop'}).setTimestamp()]});
+      break;
+    }
+
     case 'ticketreset': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild))
-        return missingPerm(message, 'Manage Server');
-
-      delete ticketSettings[message.guild.id];
-      getTicketSettings(message.guild.id); // re-init defaults
-      message.reply({ embeds: [successEmbed('Ticket Settings Reset', 'All ticket settings have been reset to defaults.')] });
+      if(!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) return missingPerm(message,'Manage Server');
+      delete ticketSettings[message.guild.id]; getTicketSettings(message.guild.id);
+      message.reply({embeds:[successEmbed('Reset','All ticket settings reset to defaults.')]});
       break;
     }
 
-    // ── !welcomeset (open the button control panel) ────────────────────────────
-    case 'welcomeset':
-    case 'wset': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild))
-        return missingPerm(message, 'Manage Server');
-
-      const wcfg = getWelcomeSettings(message.guild.id);
-      const panelMsg = await message.reply({
-        embeds    : [buildWelcomePanel(message.guild, wcfg)],
-        components: buildWelcomeRows(wcfg),
-      });
-      // Store so button handlers can refresh it
-      welcomePanelMessages[message.guild.id] = panelMsg;
+    case 'welcomeset': case 'wset': {
+      if(!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) return missingPerm(message,'Manage Server');
+      const wcfg=getWelcomeSettings(message.guild.id);
+      const pm=await message.reply({embeds:[buildWelcomePanel(message.guild,wcfg)],components:buildWelcomeRows(wcfg)});
+      welcomePanelMessages[message.guild.id]=pm;
       break;
     }
 
-    // ── !welcometest (fire a fake welcome to test config) ─────────────────────
-    case 'welcometest':
-    case 'wtest': {
-      if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild))
-        return missingPerm(message, 'Manage Server');
-
-      const wcfg = getWelcomeSettings(message.guild.id);
-      if (!wcfg.channelId)
-        return message.reply({ embeds: [errorEmbed('No welcome channel set. Use `!welcomeset` → 📢 Set Channel first.')] });
-
-      const ch = message.guild.channels.cache.get(wcfg.channelId);
-      if (!ch) return message.reply({ embeds: [errorEmbed('Welcome channel not found. Please reconfigure.')] });
-
-      const member = message.member;
-      let sentMsg;
-      if (wcfg.mode === 'embed') {
-        const embed = new EmbedBuilder()
-          .setColor(wcfg.color || '#57F287')
-          .setTitle(resolvePlaceholders(wcfg.title, member))
-          .setDescription(resolvePlaceholders(wcfg.description, member))
-          .setTimestamp();
-        if (wcfg.thumbnail) embed.setThumbnail(member.user.displayAvatarURL({ forceStatic: false }));
-        if (wcfg.footer)    embed.setFooter({ text: resolvePlaceholders(wcfg.footer, member) });
-        sentMsg = await ch.send({ embeds: [embed] });
-      } else {
-        sentMsg = await ch.send(resolvePlaceholders(wcfg.text, member));
-      }
-
-      if (wcfg.deleteAfter > 0)
-        setTimeout(() => sentMsg.delete().catch(() => {}), wcfg.deleteAfter * 1000);
-
-      message.reply({ embeds: [successEmbed('Test Sent', `A test welcome was sent to <#${wcfg.channelId}>.`)] });
+    case 'welcometest': case 'wtest': {
+      if(!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) return missingPerm(message,'Manage Server');
+      const wcfg=getWelcomeSettings(message.guild.id);
+      if(!wcfg.channelId) return message.reply({embeds:[errorEmbed('No welcome channel set.')]});
+      const ch=message.guild.channels.cache.get(wcfg.channelId);
+      if(!ch) return message.reply({embeds:[errorEmbed('Channel not found.')]});
+      const mem=message.member;
+      let sm;
+      if(wcfg.mode==='embed'){
+        const e=new EmbedBuilder().setColor(wcfg.color||'#57F287').setTitle(resolvePlaceholders(wcfg.title,mem)).setDescription(resolvePlaceholders(wcfg.description,mem)).setTimestamp();
+        if(wcfg.thumbnail) e.setThumbnail(mem.user.displayAvatarURL({forceStatic:false}));
+        if(wcfg.footer) e.setFooter({text:resolvePlaceholders(wcfg.footer,mem)});
+        sm=await ch.send({embeds:[e]});
+      } else sm=await ch.send(resolvePlaceholders(wcfg.text,mem));
+      if(wcfg.deleteAfter>0) setTimeout(()=>sm.delete().catch(()=>{}),wcfg.deleteAfter*1000);
+      message.reply({embeds:[successEmbed('Test Sent',`Welcome sent to <#${wcfg.channelId}>.`)]});
       break;
     }
 
-    // ── !addstatus ───────────────────────────────────────────────────────────
+    // ── STATUS ───────────────────────────────────────────────────────────────
+
     case 'addstatus': {
-      if (message.author.id !== client.application.owner?.id &&
-          message.author.id !== process.env.OWNER_ID)
-        return message.reply('❌ Only the **bot owner** can manage statuses.');
-
-      const validTypes = ['PLAYING', 'WATCHING', 'LISTENING', 'COMPETING'];
-      const type = args[0]?.toUpperCase();
-      if (!type || !validTypes.includes(type))
-        return message.reply(`❌ Invalid type. Choose from: \`playing\`, \`watching\`, \`listening\`, \`competing\``);
-
-      const text = args.slice(1).join(' ');
-      if (!text) return message.reply('❌ Provide status text.\nUsage: `!addstatus playing Among Us`');
-
-      statusList.push({ text, type });
-      startStatusSystem(); // restart so new status is included immediately
-
-      message.reply({
-        embeds: [successEmbed('Status Added',
-          `Added **${type}** status: \`${text}\`\n` +
-          (statusList.length === 1
-            ? '📌 This status will stay **permanently** until you add more or remove it.'
-            : `🔄 Rotating between **${statusList.length}** statuses every ${STATUS_DELAY / 1000}s.`)
-        )],
-      });
+      if(message.author.id!==client.application.owner?.id&&message.author.id!==process.env.OWNER_ID) return message.reply('❌ Bot owner only.');
+      const types=['PLAYING','WATCHING','LISTENING','COMPETING'];
+      const type=args[0]?.toUpperCase(); if(!types.includes(type)) return message.reply('❌ Types: playing watching listening competing');
+      const txt=args.slice(1).join(' '); if(!txt) return message.reply('❌ Provide status text.');
+      statusList.push({text:txt,type}); startStatusSystem();
+      message.reply({embeds:[successEmbed('Status Added',`**${type}:** \`${txt}\``)]});
       break;
     }
 
-    // ── !removestatus ────────────────────────────────────────────────────────
     case 'removestatus': {
-      if (message.author.id !== client.application.owner?.id &&
-          message.author.id !== process.env.OWNER_ID)
-        return message.reply('❌ Only the **bot owner** can manage statuses.');
-
-      const index = parseInt(args[0]) - 1;
-      if (isNaN(index) || index < 0 || index >= statusList.length)
-        return message.reply(`❌ Invalid number. Use \`${PREFIX}liststatus\` to see all statuses.`);
-
-      const removed = statusList.splice(index, 1)[0];
-      statusIndex = 0;
-      startStatusSystem();
-
-      message.reply({
-        embeds: [successEmbed('Status Removed', `Removed: \`${removed.text}\`\n**${statusList.length}** status(es) remaining.`)],
-      });
+      if(message.author.id!==client.application.owner?.id&&message.author.id!==process.env.OWNER_ID) return message.reply('❌ Bot owner only.');
+      const i=parseInt(args[0])-1; if(isNaN(i)||i<0||i>=statusList.length) return message.reply('❌ Invalid number.');
+      const r=statusList.splice(i,1)[0]; statusIndex=0; startStatusSystem();
+      message.reply({embeds:[successEmbed('Removed',`\`${r.text}\` removed.`)]});
       break;
     }
 
-    // ── !liststatus ──────────────────────────────────────────────────────────
-    case 'liststatus': {
-      if (!statusList.length)
-        return message.reply({ embeds: [infoEmbed('🎭 Status List', 'No statuses set. Use `!addstatus` to add one.')] });
-
-      const list = statusList
-        .map((s, i) => `**${i + 1}.** \`${s.type}\` — ${s.text}`)
-        .join('\n');
-
-      const mode = statusList.length === 1
-        ? '📌 Permanent (single status stays forever)'
-        : `🔄 Rotating every ${STATUS_DELAY / 1000}s`;
-
-      message.reply({
-        embeds: [infoEmbed(`🎭 Status List (${statusList.length} total)`, list)
-          .setFooter({ text: mode })],
-      });
+    case 'liststatus':
+      if(!statusList.length) return message.reply({embeds:[infoEmbed('🎭 Status List','No statuses set.')]});
+      message.reply({embeds:[infoEmbed(`🎭 Status List (${statusList.length})`,statusList.map((s,i)=>`**${i+1}.** \`${s.type}\` — ${s.text}`).join('\n')).setFooter({text:statusList.length===1?'📌 Permanent':`🔄 Every ${STATUS_DELAY/1000}s`})]});
       break;
-    }
 
-    // ── !clearstatus ─────────────────────────────────────────────────────────
     case 'clearstatus': {
-      if (message.author.id !== client.application.owner?.id &&
-          message.author.id !== process.env.OWNER_ID)
-        return message.reply('❌ Only the **bot owner** can manage statuses.');
-
-      statusList.length = 0;
-      statusIndex = 0;
-      stopSlideshow();
-      client.user.setActivity(null);
-
-      message.reply({ embeds: [successEmbed('Statuses Cleared', 'All statuses have been removed. The bot now has no status.')] });
+      if(message.author.id!==client.application.owner?.id&&message.author.id!==process.env.OWNER_ID) return message.reply('❌ Bot owner only.');
+      statusList.length=0; statusIndex=0; stopSlideshow(); client.user.setActivity(null);
+      message.reply({embeds:[successEmbed('Cleared','All statuses removed.')]});
       break;
     }
 
-    // ── Unknown command — silently ignore (avoid spamming users) ─────────────
-    default:
-      break;
+    default: break;
   }
 });
 
 // ─── Login ────────────────────────────────────────────────────────────────────
-client.login(process.env.DISCORD_TOKEN).catch((err) => {
-  console.error('❌ Failed to login. Check your DISCORD_TOKEN:', err.message);
+client.login(process.env.DISCORD_TOKEN).catch(e => {
+  console.error('❌ Login failed. Check DISCORD_TOKEN:', e.message);
   process.exit(1);
 });
