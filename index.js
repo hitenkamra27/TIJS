@@ -210,6 +210,8 @@ const bjGames  = {}, slotsCD = {}, minesGames = {}, c4Games = {}, wordleGames = 
 const snakeGames = {}, game2048 = {}, rpsGames = {}, mathDuelGames = {}, wordChainGames = {}, triviaBattleGames = {};
 // New games (batch 2)
 const battleshipGames = {}, memoryGames = {}, holGames = {}, dicePokerGames = {}, scrambleGames = {}, emojiDecodeGames = {};
+// New games (batch 3)
+const fastTypeGames = {}, countdownGames = {}, truthDareGames = {};
 
 // ─── TTT Helpers ──────────────────────────────────────────────────────────────
 const TTT_WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
@@ -676,7 +678,35 @@ const EMOJI_PUZZLES = [
   {emojis:'🦊🌲',answer:'foxforest',display:'Fox Forest',hint:'Wild animal habitat 🌲'},
 ];
 
-// ─── Hangman Data ─────────────────────────────────────────────────────────────
+// ─── Fast Type Data ───────────────────────────────────────────────────────────
+const FASTTYPE_SENTENCES = [
+  'The quick brown fox jumps over the lazy dog',
+  'Pack my box with five dozen liquor jugs',
+  'How vexingly quick daft zebras jump',
+  'The five boxing wizards jump quickly',
+  'Bright vixens jump dozy fowl quack',
+  'Discord bots make servers more fun for everyone',
+  'Programming is the art of turning coffee into code',
+  'The best way to predict the future is to create it',
+  'Every expert was once a beginner who never gave up',
+  'Speed and accuracy are the two pillars of typing mastery',
+];
+
+// ─── Truth or Dare Data ────────────────────────────────────────────────────────
+const TRUTHS = [
+  'What is your most embarrassing moment?','What is your biggest fear?',
+  'Have you ever lied to your best friend?','What is your biggest regret?',
+  'What is the most childish thing you still do?','What was your worst first impression?',
+  'Have you ever cheated in a game?','What is your weirdest habit?',
+  'What is the most embarrassing thing in your room?','What is the biggest lie you\'ve told?',
+];
+const DARES = [
+  'Send a random GIF in this channel!','Type with your eyes closed for 30 seconds!',
+  'Change your nickname to "Potato" for 5 minutes!','Send a message in all caps!',
+  'Write a 2-line poem about this server!','Send your current screen time!',
+  'Send the last photo in your gallery description (no spoilers)!','Speak in rhymes for the next 3 messages!',
+  'Tell a fun fact about yourself!','Do 10 jumping jacks and report back!',
+];
 const HM_WORDS = ['javascript','discord','programming','keyboard','elephant','midnight','rainbow','adventure','telescope','butterfly','champion','universe','developer','algorithm','database'];
 const HM_STAGES = [
   '```\n  +---+\n  |   |\n      |\n      |\n      |\n      |\n=========```',
@@ -1103,40 +1133,54 @@ client.on('messageCreate', async (message) => {
     return message.reply({embeds:[successEmbed('Setup Complete!','All settings saved. Use `!ticket` to send the panel.')]});
   }
 
-  // Hangman guess
+  // Hangman guess — any player in channel can guess
   const hmGame = hangmanGames[message.channel.id];
-  if (hmGame && hmGame.userId===message.author.id && !message.content.startsWith(PREFIX)) {
+  if (hmGame && !message.content.startsWith(PREFIX)) {
     const g = message.content.trim().toLowerCase();
     if (g.length===1 && /[a-z]/.test(g)) {
-      if (hmGame.guessed.includes(g)) return message.reply('❌ Already guessed!');
+      if (hmGame.guessed.includes(g)) return message.reply(`❌ **${g.toUpperCase()}** was already guessed!`);
       hmGame.guessed.push(g);
-      if (!hmGame.word.includes(g)) hmGame.wrong++;
+      const correct = hmGame.word.includes(g);
+      if (!correct) hmGame.wrong++;
+      if (!hmGame.scores) hmGame.scores = {};
+      if (correct) hmGame.scores[message.author.id] = (hmGame.scores[message.author.id]||0) + 1;
       const disp = hmGame.word.split('').map(l=>hmGame.guessed.includes(l)?l:'_').join(' ');
       const won=!disp.includes('_'), lost=hmGame.wrong>=6;
-      if (won||lost) delete hangmanGames[message.channel.id];
-      return message.reply({embeds:[new EmbedBuilder().setColor(won?'#57F287':lost?'#ED4245':'#5865F2')
-        .setTitle(`🪓 Hangman${won?' — You Won! 🎉':lost?' — Game Over! 💀':''}`)
-        .setDescription(`${HM_STAGES[hmGame.wrong]}\n**Word:** \`${disp}\`\nWrong: ${hmGame.guessed.filter(x=>!hmGame.word.includes(x)).join(', ')||'none'} (${hmGame.wrong}/6)${lost?`\n\nWord: **${hmGame.word}**`:''}`)
-        .setTimestamp()]});
+      if (won||lost) {
+        const scoreboard = Object.entries(hmGame.scores||{}).sort(([,a],[,b])=>b-a).map(([id,s],i)=>`${['🥇','🥈','🥉'][i]||'🏅'} <@${id}>: **${s}** correct letter(s)`).join('\n');
+        delete hangmanGames[message.channel.id];
+        return message.reply({embeds:[new EmbedBuilder().setColor(won?'#57F287':'#ED4245')
+          .setTitle(`🪓 Hangman${won?' — Solved! 🎉':' — Game Over! 💀'}`)
+          .setDescription(`${HM_STAGES[hmGame.wrong]}\n**Word:** \`${hmGame.word.split('').join(' ')}\`\n\n${won?`✅ <@${message.author.id}> solved it!`:`💀 Nobody solved it in time!`}\n\n**Scoreboard:**\n${scoreboard||'No correct guesses.'}`)
+          .setTimestamp()]});
+      }
+      return message.reply({embeds:[new EmbedBuilder().setColor(correct?'#57F287':'#ED4245')
+        .setTitle(`🪓 Hangman — ${correct?`✅ ${g.toUpperCase()} is in the word!`:`❌ ${g.toUpperCase()} is wrong!`}`)
+        .setDescription(`${HM_STAGES[hmGame.wrong]}\n**Word:** \`${disp}\`\nGuessed: ${hmGame.guessed.map(x=>hmGame.word.includes(x)?`✅${x}`:`❌${x}`).join(' ')} (${hmGame.wrong}/6 wrong)\n\n*Anyone can guess! Type a letter.*`)
+        .setFooter({text:`Started by the channel • ${hmGame.word.length} letters`}).setTimestamp()]});
     }
   }
 
-  // Trivia answer
+  // Trivia answer — any player can answer
   const tvGame = triviaGames[message.channel.id];
-  if (tvGame && tvGame.userId===message.author.id && !message.content.startsWith(PREFIX)) {
+  if (tvGame && !message.content.startsWith(PREFIX)) {
     const g=message.content.trim().toLowerCase(), correct=tvGame.q.a;
     const ok=g===correct||g===tvGame.q.c.find(c=>c.toLowerCase()===correct)?.toLowerCase();
+    if (!ok) return; // Ignore wrong guesses silently to allow more guesses
     delete triviaGames[message.channel.id];
-    return message.reply({embeds:[new EmbedBuilder().setColor(ok?'#57F287':'#ED4245').setTitle(ok?'✅ Correct!':'❌ Wrong!')
-      .setDescription(ok?'🎉 Well done!':`The answer was: **${tvGame.q.c.find(c=>c.toLowerCase()===correct)}**`).setTimestamp()]});
+    return message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('✅ Correct!')
+      .setDescription(`🎉 <@${message.author.id}> got it!\n\n**Answer:** ${tvGame.q.c.find(c=>c.toLowerCase()===correct)}`).setTimestamp()]});
   }
 
-  // Number guess
+  // Number guess — any player can guess
   const ngGame = guessGames[message.channel.id];
-  if (ngGame && ngGame.userId===message.author.id && !message.content.startsWith(PREFIX)) {
+  if (ngGame && !message.content.startsWith(PREFIX)) {
     const n=parseInt(message.content.trim()); if(isNaN(n)) return;
     ngGame.attempts++;
-    if (n===ngGame.number) { delete guessGames[message.channel.id]; return message.reply({embeds:[successEmbed('🎯 Correct!',`Number was **${ngGame.number}**! Got it in **${ngGame.attempts}** attempt(s)!`)]}); }
+    if (n===ngGame.number) { 
+      delete guessGames[message.channel.id]; 
+      return message.reply({embeds:[successEmbed('🎯 Correct!',`<@${message.author.id}> found it! The number was **${ngGame.number}**! Got it in **${ngGame.attempts}** attempt(s)!`)]}); 
+    }
     const hint = n<ngGame.number?'📈 Too low!':'📉 Too high!';
     if (ngGame.attempts>=7) { delete guessGames[message.channel.id]; return message.reply({embeds:[errorEmbed(`Out of attempts! Number was **${ngGame.number}**.`)]}); }
     return message.reply({embeds:[infoEmbed('🔢 Guess',`${hint} Attempts: **${ngGame.attempts}/7**`)]});
@@ -1271,19 +1315,34 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // Wordle guess
+  // Wordle guess — any player can guess
   const wlGame = wordleGames[message.channel.id];
-  if (wlGame && wlGame.userId===message.author.id && !message.content.startsWith(PREFIX)) {
+  if (wlGame && !message.content.startsWith(PREFIX)) {
     const g=message.content.trim().toLowerCase();
-    if (g.length!==5||!/^[a-z]+$/.test(g)) return message.reply('❌ Type a valid 5-letter word!');
+    if (g.length!==5||!/^[a-z]+$/.test(g)) return;
     const result=evaluateWordle(g,wlGame.word);
-    wlGame.guesses.push({g,result});
+    wlGame.guesses.push({g,result,uid:message.author.id});
     const won=g===wlGame.word, lost=wlGame.guesses.length>=6&&!won;
     if (won||lost) delete wordleGames[message.channel.id];
-    const board=wlGame.guesses.map(x=>x.result.map(r=>r.e).join('')).join('\n');
+    const board=wlGame.guesses.map(x=>`${x.result.map(r=>r.e).join('')} \`${x.g}\` — <@${x.uid}>`).join('\n');
     return message.reply({embeds:[new EmbedBuilder().setColor(won?'#538D4E':lost?'#ED4245':'#5865F2')
-      .setTitle(`🟩 Wordle${won?' — Won! 🎉':lost?` — Over! Word: **${wlGame.word}**`:` — Guess ${wlGame.guesses.length}/6`}`)
-      .setDescription(board).setFooter({text:won||lost?'Game over!':'Type next guess!'}).setTimestamp()]});
+      .setTitle(`🟩 Wordle${won?` — <@${message.author.id}> Won! 🎉`:lost?` — Over! Word: **${wlGame.word}**`:` — Guess ${wlGame.guesses.length}/6`}`)
+      .setDescription(board).setFooter({text:won||lost?'Game over! Use !wordle to start a new one':'Anyone can guess! Type a 5-letter word!'}).setTimestamp()]});
+  }
+
+  // Fast Type answer
+  const ftGame = fastTypeGames[message.channel.id];
+  if (ftGame && !message.content.startsWith(PREFIX) && !ftGame.winner) {
+    const typed = message.content.trim();
+    if (typed.toLowerCase() === ftGame.sentence.toLowerCase()) {
+      ftGame.winner = message.author.id;
+      const elapsed = ((Date.now() - ftGame.startTime) / 1000).toFixed(2);
+      const wpm = Math.round((ftGame.sentence.split(' ').length / (elapsed / 60)));
+      delete fastTypeGames[message.channel.id];
+      return message.reply({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('⌨️ Fast Type — Winner! 🏆')
+        .setDescription(`🎉 <@${message.author.id}> finished first!\n\n⏱️ **Time:** ${elapsed}s\n💨 **WPM:** ~${wpm} words/min\n\n**Sentence:** \`${ftGame.sentence}\``)
+        .setTimestamp()]});
+    }
   }
 
   if (!message.content.startsWith(PREFIX)) return;
@@ -1299,9 +1358,11 @@ client.on('messageCreate', async (message) => {
           {name:'🛡️ Moderation', value:`\`kick\` \`ban\` \`unban\` \`mute\` \`unmute\` \`warn\` \`warnings\` \`clearwarnings\` \`slowmode\` \`lock\` \`unlock\``},
           {name:'🗑️ Messages',   value:`\`purge\` \`purgeuser\``},
           {name:'📊 Info',       value:`\`userinfo\` \`serverinfo\` \`botinfo\` \`ping\` \`avatar\` \`roleinfo\` \`profile\``},
-          {name:'📩 DM',         value:`\`dm\` \`dmall\` \`announce\``},
+          {name:'📩 DM',         value:`\`dm\` \`dmall\` \`announce\`\n> \`!dm @user1 @user2 message\` — DM multiple users (rate-limited)`},
           {name:'😂 Fun',        value:`\`meme\` \`joke\` \`8ball\` \`ship\` \`fight\` \`slap\` \`hug\` \`kiss\` \`pat\` \`coinflip\` \`roll\` \`gay\` \`iq\` \`rizz\` \`aura\` \`simp\` \`drip\` \`sus\``},
-          {name:'🎮 Games',      value:`\`ttt\` \`hangman\` \`trivia\` \`guess\` \`rps\` \`blackjack\` \`slots\` \`mines\` \`connect4\` \`wordle\` \`snake\` \`2048\` \`mathduel\` \`wordchain\` \`triviabattle\` \`battleship\` \`memory\` \`hol\` \`dicepoker\` \`scramble\` \`emojidecode\``},
+          {name:'🎮 Games (Solo)',value:`\`blackjack\` \`slots\` \`mines\` \`snake\` \`2048\` \`memory\` \`hol\` \`dicepoker\`\n> \`wordle\` \`hangman\` \`trivia\` \`guess\` \`scramble\` \`emojidecode\` (anyone can join!)`},
+          {name:'⚔️ Multiplayer Games',value:`\`ttt @user\` \`connect4 @user\` \`rps @user\` \`battleship @user\`\n> \`mathduel @user\` \`wordchain @user\` \`triviabattle @user\`\n> \`fasttype\` \`truthordare\`\n> \`rps rock/paper/scissors\` — vs bot`},
+          {name:'🛑 Game Control',value:`\`stopgame\` — Stop all active games in channel (Mod only)`},
           {name:'🎫 Tickets',    value:`\`ticket\` \`ticketset\` \`ticketreset\``},
           {name:'🎉 Welcome',    value:`\`welcomeset\` \`welcometest\``},
           {name:'🛠️ Utility',   value:`\`say\` \`embed\` \`poll\``},
@@ -1466,10 +1527,30 @@ client.on('messageCreate', async (message) => {
     // ── !dm ─────────────────────────────────────────────────────────────────
     case 'dm': {
       if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) return missingPerm(message,'Moderate Members');
-      const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention a user.');
-      const txt=args.slice(1).join(' '); if(!txt) return message.reply('❌ Provide a message.');
-      try { await t.send({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`📩 From ${message.guild.name}`).setDescription(txt).setFooter({text:`By ${message.author.username}`}).setTimestamp()]}); message.reply({embeds:[successEmbed('DM Sent',`Sent to **${t.username}**.`)]}); }
-      catch { message.reply({embeds:[errorEmbed(`Cannot DM **${t.username}**. DMs closed.`)]}); }
+      const targets = [...message.mentions.users.values()];
+      if(!targets.length) return message.reply('❌ Mention at least one user. Usage: `!dm @user1 @user2 ... message`');
+      // Remove all mentioned users from args to get the message text
+      const txt = message.content.replace(/^!\S+\s*/,'').replace(/<@!?(\d+)>/g,'').trim();
+      if(!txt) return message.reply('❌ Provide a message after the mentions.');
+      if (targets.length === 1) {
+        // Single user — instant DM
+        try {
+          await targets[0].send({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`📩 From ${message.guild.name}`).setDescription(txt).setFooter({text:`By ${message.author.username}`}).setTimestamp()]});
+          message.reply({embeds:[successEmbed('DM Sent',`Sent to **${targets[0].username}**.`)]});
+        } catch { message.reply({embeds:[errorEmbed(`Cannot DM **${targets[0].username}**. Their DMs are closed.`)]}); }
+      } else {
+        // Multiple users — rate-limited (1.5s gap to avoid ban)
+        const prog = await message.reply(`📤 Sending DMs to **${targets.length}** users... (rate-limited for safety)`);
+        let sent=0, failed=0;
+        for (const t of targets) {
+          try {
+            await t.send({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle(`📩 From ${message.guild.name}`).setDescription(txt).setFooter({text:`By ${message.author.username}`}).setTimestamp()]});
+            sent++;
+          } catch { failed++; }
+          await sleep(1500); // 1.5s gap between DMs to avoid rate-limit ban
+        }
+        prog.edit({embeds:[infoEmbed('📩 Multi-DM Complete',`✅ Sent: **${sent}**\n❌ Failed (DMs closed): **${failed}**\n\n*Rate limiting was applied to protect the bot.*`)],content:''});
+      }
       break;
     }
 
@@ -1780,59 +1861,79 @@ client.on('messageCreate', async (message) => {
 
     case 'ttt': {
       const opp=message.mentions.members.first();
-      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
+      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent! Usage: `!ttt @user`');
       if(tttGames[message.channel.id]) return message.reply('❌ Game already running here.');
       const g={board:Array(9).fill(null),player1:message.author.id,player2:opp.id,currentPlayer:message.author.id,symbol:'❌'};
       tttGames[message.channel.id]=g;
-      const tttMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('❌ Tic Tac Toe ⭕').setDescription(`⚔️ **${message.author.username}** challenges **${opp.user.username}**!\n\n*Setting up the board...*`).setTimestamp()]});
+      const tttMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('❌ Tic Tac Toe ⭕')
+        .setDescription(`⚔️ **${message.author.username}** challenges **${opp.user.username}**!\n\n📖 **How to play:**\n• **2 players** take turns placing their symbol\n• <@${message.author.id}> is ❌ | <@${opp.id}> is ⭕\n• Get **3 in a row** (horizontal, vertical, or diagonal) to win!\n• Click the buttons to place your symbol\n\n*Setting up the board...*`).setTimestamp()]});
       await sleep(700);
       await tttMsg.edit({embeds:[buildTTTEmbed(g,`<@${message.author.id}>'s turn (❌)`)],components:buildTTTRows(g.board,false)});
       break;
     }
 
     case 'hangman': {
-      if(hangmanGames[message.channel.id]) return message.reply('❌ Hangman already running here!');
+      if(hangmanGames[message.channel.id]) return message.reply('❌ Hangman already running here! Type a letter to join in.');
       const word=HM_WORDS[Math.floor(Math.random()*HM_WORDS.length)];
-      hangmanGames[message.channel.id]={word,guessed:[],wrong:0,userId:message.author.id};
-      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🪓 Hangman')
-        .setDescription(`${HM_STAGES[0]}\n**Word:** \`${'_ '.repeat(word.length).trim()}\`\n\nType a **single letter** in chat!`)
-        .setFooter({text:`${word.length} letters • 6 wrong guesses allowed`}).setTimestamp()]});
+      hangmanGames[message.channel.id]={word,guessed:[],wrong:0,scores:{}};
+      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🪓 Hangman — Game Started!')
+        .setDescription(`${HM_STAGES[0]}\n**Word:** \`${'_ '.repeat(word.length).trim()}\`\n\n📖 **How to play:**\n• **Anyone** in this channel can guess!\n• Type a **single letter** in chat to guess\n• You have **6 wrong guesses** before the man is hanged\n• Correct letters earn you points on the scoreboard\n\n👥 **Players:** Everyone — no limits!\n📏 **Word length:** ${word.length} letters`)
+        .setFooter({text:`Type a single letter to guess! • 6 wrong guesses allowed`}).setTimestamp()]});
       break;
     }
 
     case 'trivia': {
-      if(triviaGames[message.channel.id]) return message.reply('❌ Trivia already running!');
+      if(triviaGames[message.channel.id]) return message.reply('❌ Trivia already running! Type your answer to participate.');
       const q=TRIVIA[Math.floor(Math.random()*TRIVIA.length)];
       triviaGames[message.channel.id]={q,userId:message.author.id};
       const choices=q.c.map((c,i)=>`${['🇦','🇧','🇨','🇩'][i]} **${c}**`).join('\n');
-      message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🧠 Trivia').setDescription(`**${q.q}**\n\n${choices}\n\nType your answer!`).setFooter({text:'30 seconds!'}).setTimestamp()]});
-      setTimeout(()=>{if(triviaGames[message.channel.id]){delete triviaGames[message.channel.id];message.channel.send({embeds:[errorEmbed(`Time's up! Answer: **${q.c.find(c=>c.toLowerCase()===q.a)}**`)]}).catch(()=>{});}},30000);
+      message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🧠 Trivia — Channel Question!')
+        .setDescription(`**${q.q}**\n\n${choices}\n\n📖 **How to play:** Type the **letter** (A/B/C/D) or the **full answer** in chat!\n👥 **Players:** Anyone in this channel — first correct answer wins!\n⏱️ **Time:** 30 seconds`)
+        .setFooter({text:'Anyone can answer! • 30 seconds'}).setTimestamp()]});
+      setTimeout(()=>{if(triviaGames[message.channel.id]){delete triviaGames[message.channel.id];message.channel.send({embeds:[errorEmbed(`⏱️ Time's up! The answer was: **${q.c.find(c=>c.toLowerCase()===q.a)}**`)]}).catch(()=>{});}},30000);
       break;
     }
 
     case 'guess': {
-      if(guessGames[message.channel.id]) return message.reply('❌ Already running!');
+      if(guessGames[message.channel.id]) return message.reply('❌ Already running! Type a number to guess.');
       const n=Math.floor(Math.random()*100)+1;
       guessGames[message.channel.id]={number:n,attempts:0,userId:message.author.id};
-      message.reply({embeds:[infoEmbed('🔢 Guess the Number','I picked a number **1–100**!\nType your guess. **7 attempts**. 60 seconds!')]});
-      setTimeout(()=>{if(guessGames[message.channel.id]){delete guessGames[message.channel.id];message.channel.send({embeds:[errorEmbed(`Time's up! Number was **${n}**.`)]}).catch(()=>{});}},60000);
+      message.reply({embeds:[infoEmbed('🔢 Guess the Number',`I picked a number **1–100**!\n\n📖 **How to play:**\n• Type a number in chat to guess\n• I'll tell you if it's too high or too low\n• You have **7 attempts** total\n\n👥 **Players:** Anyone in this channel!\n⏱️ **Time:** 60 seconds\n\n*Type your first guess now!*`)]});
+      setTimeout(()=>{if(guessGames[message.channel.id]){delete guessGames[message.channel.id];message.channel.send({embeds:[errorEmbed(`⏱️ Time's up! The number was **${n}**.`)]}).catch(()=>{});}},60000);
       break;
     }
 
-    case 'rps': {
-      const map={rock:'🪨',paper:'📄',scissors:'✂️'};
-      const uc=args[0]?.toLowerCase(); if(!map[uc]) return message.reply('❌ Choose `rock`, `paper`, or `scissors`!');
-      const bc=Object.keys(map)[Math.floor(Math.random()*3)];
-      const wins={rock:'scissors',paper:'rock',scissors:'paper'};
-      const res=uc===bc?'🤝 Tie!':wins[uc]===bc?'🎉 You win!':'🤖 I win!';
-      const color=uc===bc?'#FEE75C':wins[uc]===bc?'#57F287':'#ED4245';
-      const countdown = await message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('✊ Rock Paper Scissors').setDescription(`You threw **${map[uc]} ${uc}**\n\n**3...**`).setTimestamp()]});
-      await sleep(600);
-      await countdown.edit({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('✊ Rock Paper Scissors').setDescription(`You threw **${map[uc]} ${uc}**\n\n**3... 2...**`).setTimestamp()]});
-      await sleep(600);
-      await countdown.edit({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('✊ Rock Paper Scissors').setDescription(`You threw **${map[uc]} ${uc}**\n\n**3... 2... 1...**`).setTimestamp()]});
-      await sleep(600);
-      await countdown.edit({embeds:[new EmbedBuilder().setColor(color).setTitle('✊ Rock Paper Scissors — Result!').setDescription(`You: **${map[uc]} ${uc}**\nMe: **${map[bc]} ${bc}**\n\n${res}`).setTimestamp()]});
+    case 'rps': case 'rockpaperscissors': {
+      const opp=message.mentions.members.first();
+      // If no opponent mentioned → play vs bot
+      if (!opp) {
+        const map={rock:'🪨',paper:'📄',scissors:'✂️'};
+        const uc=args[0]?.toLowerCase(); if(!map[uc]) return message.reply('❌ Choose `rock`, `paper`, or `scissors`! Or mention a player: `!rps @user`');
+        const bc=Object.keys(map)[Math.floor(Math.random()*3)];
+        const wins={rock:'scissors',paper:'rock',scissors:'paper'};
+        const res=uc===bc?'🤝 Tie!':wins[uc]===bc?'🎉 You win!':'🤖 I win!';
+        const color=uc===bc?'#FEE75C':wins[uc]===bc?'#57F287':'#ED4245';
+        const countdown = await message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('✊ Rock Paper Scissors vs Bot').setDescription(`You threw **${map[uc]} ${uc}**\n\n**3...**`).setTimestamp()]});
+        await sleep(600);
+        await countdown.edit({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('✊ Rock Paper Scissors vs Bot').setDescription(`You threw **${map[uc]} ${uc}**\n\n**3... 2...**`).setTimestamp()]});
+        await sleep(600);
+        await countdown.edit({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('✊ Rock Paper Scissors vs Bot').setDescription(`You threw **${map[uc]} ${uc}**\n\n**3... 2... 1...**`).setTimestamp()]});
+        await sleep(600);
+        await countdown.edit({embeds:[new EmbedBuilder().setColor(color).setTitle('✊ Rock Paper Scissors — Result!').setDescription(`You: **${map[uc]} ${uc}**\nBot: **${map[bc]} ${bc}**\n\n${res}\n\n💡 *Tip: Use \`!rps @user\` to play against a friend!*`).setTimestamp()]});
+        break;
+      }
+      // Multiplayer RPS
+      if(opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
+      if(rpsGames[message.channel.id]) return message.reply('❌ RPS game already running here!');
+      const bestOf=parseInt(args[1])||3;
+      const allowed=[1,3,5,7];
+      if(!allowed.includes(bestOf)) return message.reply('❌ Best-of must be 1, 3, 5 or 7.');
+      const g={p1:message.author.id,p2:opp.id,score1:0,score2:0,round:1,bestOf,choice1:null,choice2:null};
+      rpsGames[message.channel.id]=g;
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🎮 Rock Paper Scissors — Multiplayer')
+        .setDescription(`⚔️ **${message.author.username}** challenges **${opp.user.username}**!\n**Best of ${bestOf}** — May the best hand win! ✊\n\n📖 **How to play:**\n• Both players secretly pick 🪨 Rock, 📄 Paper, or ✂️ Scissors using the buttons\n• Choices are hidden until both pick!\n• **First to ${Math.ceil(bestOf/2)} wins** takes the match\n\n*Loading...*`).setTimestamp()]});
+      await sleep(800);
+      await initMsg.edit({embeds:[buildRPSLobbyEmbed(g)],components:buildRPSRows(false)});
       break;
     }
 
@@ -1842,9 +1943,9 @@ client.on('messageCreate', async (message) => {
       const deck=makeDeck();
       const ph=[drawCard(deck),drawCard(deck)], dh=[drawCard(deck),drawCard(deck)];
       bjGames[message.author.id]={deck,playerHand:ph,dealerHand:dh,bet};
-      // Dealing animation
-      const dealMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🃏 Blackjack — Dealing...')
-        .setDescription(`*Shuffling deck...*\n\nBet: **${bet} coins**`).setTimestamp()]});
+      // Dealing animation with game info
+      const dealMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🃏 Blackjack')
+        .setDescription(`📖 **How to play:**\n• **1 player** vs the Dealer (bot)\n• Get closer to **21** than the dealer without going over\n• **Hit** = draw another card | **Stand** = keep your hand\n• Dealer hits until 17+\n• **Blackjack (21 instantly) = 2.5× payout!**\n\nBet: **${bet} coins**\n*Shuffling deck...*`).setTimestamp()]});
       await sleep(500);
       await dealMsg.edit({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🃏 Blackjack — Dealing...')
         .setDescription(`**Your hand:** ${fmtHand([ph[0]])} 🂠\n**Dealer shows:** 🂠 🂠\n\nBet: **${bet} coins**`).setTimestamp()]});
@@ -1897,23 +1998,24 @@ client.on('messageCreate', async (message) => {
 
     case 'connect4': case 'c4': {
       const opp=message.mentions.members.first();
-      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
+      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent! Usage: `!c4 @user`');
       if(c4Games[message.channel.id]) return message.reply('❌ Game already running here!');
       const g={board:makeC4Board(),player1:message.author.id,player2:opp.id,currentPlayer:message.author.id,symbol:'🔴'};
       c4Games[message.channel.id]=g;
-      const c4Msg = await message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🔴 Connect 4 🟡').setDescription(`⚔️ **${message.author.username}** 🔴 challenges **${opp.user.username}** 🟡!\n\n*Dropping pieces into position...*`).setTimestamp()]});
+      const c4Msg = await message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🔴 Connect 4 🟡')
+        .setDescription(`⚔️ **${message.author.username}** 🔴 challenges **${opp.user.username}** 🟡!\n\n📖 **How to play:**\n• **2 players** take turns dropping pieces\n• <@${message.author.id}> is 🔴 | <@${opp.id}> is 🟡\n• Click a **column button (1–7)** to drop your piece\n• Connect **4 in a row** (horizontally, vertically, or diagonally) to win!\n• ⚫ = empty cell\n\n*Dropping pieces into position...*`).setTimestamp()]});
       await sleep(700);
       await c4Msg.edit({embeds:[buildC4Embed(g,`<@${message.author.id}>'s turn (🔴)`)],components:buildC4Rows(false)});
       break;
     }
 
     case 'wordle': {
-      if(wordleGames[message.channel.id]) return message.reply('❌ Wordle already running here!');
+      if(wordleGames[message.channel.id]) return message.reply('❌ Wordle already running here! Type a 5-letter word to join.');
       const word=WORDLE_WORDS[Math.floor(Math.random()*WORDLE_WORDS.length)];
       wordleGames[message.channel.id]={word,guesses:[],userId:message.author.id};
-      message.reply({embeds:[new EmbedBuilder().setColor('#538D4E').setTitle('🟩 Wordle')
-        .setDescription('Guess the **5-letter word** in 6 tries!\n\n🟩 Right letter + spot\n🟨 Right letter, wrong spot\n⬛ Wrong letter\n\nType your first guess!')
-        .setFooter({text:'6 guesses'}).setTimestamp()]});
+      message.reply({embeds:[new EmbedBuilder().setColor('#538D4E').setTitle('🟩 Wordle — Channel Game!')
+        .setDescription('Guess the **5-letter word** in 6 tries!\n\n🟩 Right letter + right spot\n🟨 Right letter, wrong spot\n⬛ Letter not in word\n\n📖 **How to play:** Type any **5-letter word** in chat to guess!\n👥 **Players:** Anyone in this channel!\n🎯 **Goal:** Solve the word in 6 tries\n\n*Type your first 5-letter word to start guessing!*')
+        .setFooter({text:'Anyone can guess • 6 attempts'}).setTimestamp()]});
       break;
     }
 
@@ -1938,31 +2040,19 @@ client.on('messageCreate', async (message) => {
       break;
     }
 
-    case 'rps': case 'rockpaperscissors': {
-      const opp=message.mentions.members.first();
-      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
-      if(rpsGames[message.channel.id]) return message.reply('❌ RPS game already running here!');
-      const bestOf=parseInt(args[1])||3;
-      const allowed=[1,3,5,7];
-      if(!allowed.includes(bestOf)) return message.reply('❌ Best-of must be 1, 3, 5 or 7.');
-      const g={p1:message.author.id,p2:opp.id,score1:0,score2:0,round:1,bestOf,choice1:null,choice2:null};
-      rpsGames[message.channel.id]=g;
-      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🎮 Rock Paper Scissors').setDescription(`⚔️ **${message.author.username}** challenges **${opp.user.username}**!\n**Best of ${bestOf}** — May the best hand win! ✊`).setTimestamp()]});
-      await sleep(800);
-      await initMsg.edit({embeds:[buildRPSLobbyEmbed(g)],components:buildRPSRows(false)});
-      break;
-    }
+
 
     case 'mathduel': case 'md': {
       const opp=message.mentions.members.first();
-      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
+      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent! Usage: `!mathduel @user [difficulty 1-3]`');
       if(mathDuelGames[message.channel.id]) return message.reply('❌ Math Duel already running here!');
       const diff=parseInt(args[1])||1;
       if(diff<1||diff>3) return message.reply('❌ Difficulty: 1 (easy) 2 (medium) 3 (hard)');
       const q=genMathQ(diff);
       const g={p1:message.author.id,p2:opp.id,score1:0,score2:0,qNum:0,diff,current:q,answered:false};
       mathDuelGames[message.channel.id]=g;
-      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🧮 Math Duel').setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\nDifficulty: ${'⭐'.repeat(diff)}\n\n*Loading questions...*`).setTimestamp()]});
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🧮 Math Duel')
+        .setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\nDifficulty: ${'⭐'.repeat(diff)}\n\n📖 **How to play:**\n• **2 players** race to solve math problems\n• Type the correct answer in chat — **first to answer** wins the point!\n• **First to 3 points** (or most after 5 Qs) wins!\n• Difficulty ${diff}: ${diff===1?'Addition (easy)':diff===2?'Multiplication (medium)':'Complex math (hard)'}\n\n*Loading questions...*`).setTimestamp()]});
       await sleep(800);
       await initMsg.edit({embeds:[buildMathEmbed(g)]});
       break;
@@ -1970,13 +2060,14 @@ client.on('messageCreate', async (message) => {
 
     case 'wordchain': case 'wc': {
       const opp=message.mentions.members.first();
-      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
+      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent! Usage: `!wordchain @user`');
       if(wordChainGames[message.channel.id]) return message.reply('❌ Word Chain already running here!');
       const starters='abcdefghijklmnoprstw';
       const startLetter=starters[Math.floor(Math.random()*starters.length)];
       const g={p1:message.author.id,p2:opp.id,chain:[],lastLetter:startLetter,currentTurn:message.author.id,used:new Set(),lives1:3,lives2:3,timer:null};
       wordChainGames[message.channel.id]=g;
-      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('🔗 Word Chain').setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\n\n*Setting up the chain...*`).setTimestamp()]});
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('🔗 Word Chain')
+        .setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\n\n📖 **How to play:**\n• **2 players** take turns typing words\n• Each word must **start with the last letter** of the previous word\n• You have **15 seconds** per turn\n• No repeating words!\n• Each timeout costs a ❤️ life — lose all 3 and you're out!\n\n*Setting up the chain...*`).setTimestamp()]});
       await sleep(700);
       await initMsg.edit({embeds:[buildWordChainEmbed(g)]});
       g.timer=setTimeout(async()=>{
@@ -1990,12 +2081,13 @@ client.on('messageCreate', async (message) => {
 
     case 'triviabattle': case 'tb': {
       const opp=message.mentions.members.first();
-      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
+      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent! Usage: `!triviabattle @user`');
       if(triviaBattleGames[message.channel.id]) return message.reply('❌ Trivia Battle already running here!');
       const shuffled=[...TRIVIA_BATTLE_Q].sort(()=>Math.random()-0.5).slice(0,5);
       const g={p1:message.author.id,p2:opp.id,questions:shuffled,qNum:0,score1:0,score2:0,answered:[],roundWinner:null};
       triviaBattleGames[message.channel.id]=g;
-      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#E67E22').setTitle('⚡ Trivia Battle').setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\n5 questions — fastest correct answer wins the point!\n\n*Loading questions...*`).setTimestamp()]});
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#E67E22').setTitle('⚡ Trivia Battle')
+        .setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\n\n📖 **How to play:**\n• **2 players** answer the same questions simultaneously\n• Click A/B/C/D buttons to answer\n• **First correct answer** wins the point each round\n• 5 questions total — highest score wins!\n\n*Loading questions...*`).setTimestamp()]});
       await sleep(800);
       await initMsg.edit({embeds:[buildTriviaBattleEmbed(g)],components:buildTriviaBattleRows(false)});
       break;
@@ -2003,13 +2095,14 @@ client.on('messageCreate', async (message) => {
 
     case 'battleship': case 'bs': {
       const opp=message.mentions.members.first();
-      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent!');
+      if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent! Usage: `!battleship @user`');
       if(battleshipGames[message.channel.id]) return message.reply('❌ Battleship already running here!');
       const b1=makeBSBoard(), b2=makeBSBoard();
       const ships1=placeBSShips(b1), ships2=placeBSShips(b2);
       const g={p1:message.author.id,p2:opp.id,board1:b1,board2:b2,ships1,ships2,shots1:[],shots2:[],currentTurn:message.author.id};
       battleshipGames[message.channel.id]=g;
-      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#3498DB').setTitle('🚢 Battleship').setDescription(`⚓ **${message.author.username}** vs **${opp.user.username}**!\n\n*Deploying fleets on a 5×5 grid...*\n🚢 Ships placed secretly!`).setTimestamp()]});
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#3498DB').setTitle('🚢 Battleship')
+        .setDescription(`⚓ **${message.author.username}** vs **${opp.user.username}**!\n\n📖 **How to play:**\n• **2 players** on a 5×5 grid (A–E columns, 1–5 rows)\n• Ships are placed automatically and secretly\n• Take turns typing coordinates like \`A1\`, \`C3\`, \`E5\`\n• 💥 = Hit, 〰️ = Miss, 🟦 = Unknown\n• **Sink all enemy ships** to win!\n• Ships: ${ships1.map(s=>s.name).join(', ')}\n\n*Deploying fleets...*`).setTimestamp()]});
       await sleep(900);
       await initMsg.edit({embeds:[new EmbedBuilder().setColor('#3498DB').setTitle('🚢 Battleship — Battle Begins! ⚓')
         .setDescription(`<@${message.author.id}> vs <@${opp.id}>\n\n**Grid:** 5×5 (A–E columns, 1–5 rows)\n**Ships:** ${ships1.map(s=>s.name).join(', ')}\n\n<@${g.currentTurn}>'s turn! Type a coordinate like \`A1\`, \`C3\`, \`E5\`\n\n${renderBSGrid(b2,[])}`)
@@ -2023,7 +2116,9 @@ client.on('messageCreate', async (message) => {
       memoryGames[message.author.id]=g;
       const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('🃏 Memory Match').setDescription('*Shuffling cards...*').setTimestamp()]});
       await sleep(600);
-      await initMsg.edit({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('🃏 Memory Match').setDescription(`${renderMemory(g)}\n\n**12 cards — 6 pairs** hidden face-down!\nClick buttons 1–12 to flip cards.\n\n**Moves:** 0 | **Pairs:** 0/6`).setTimestamp()],components:buildMemoryRows(g,false)});
+      await initMsg.edit({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('🃏 Memory Match')
+        .setDescription(`${renderMemory(g)}\n\n📖 **How to play:**\n• **1 player** game (solo challenge)\n• Click **numbered buttons** to flip cards\n• Find all **6 matching pairs** to win!\n• Try to do it in as few moves as possible!\n• 🌟🌟🌟 = ≤10 moves | ⭐⭐ = ≤15 | ⭐ = more\n\n**Moves:** 0 | **Pairs:** 0/6`)
+        .setTimestamp()],components:buildMemoryRows(g,false)});
       break;
     }
 
@@ -2034,11 +2129,10 @@ client.on('messageCreate', async (message) => {
       holGames[message.author.id]=g;
       const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#1ABC9C').setTitle('📊 Higher or Lower').setDescription('*Loading questions...*').setTimestamp()]});
       await sleep(500);
-      // Show first item value, then go to second
       await initMsg.edit({embeds:[new EmbedBuilder().setColor('#1ABC9C').setTitle('📊 Higher or Lower — Starting!')
-        .setDescription(`**First card:** ${items[0].name}\n> **${items[0].val} ${items[0].unit}**\n\n**Next:** ${items[1].name}\nIs it **Higher** or **Lower**?\n\n⭐ Streak: 0`)
-        .setFooter({text:'Click a button!'}).setTimestamp()],components:buildHOLRows(false)});
-      g.idx=1; // Ready to compare
+        .setDescription(`📖 **How to play:**\n• **1 player** game — solo or challenge friends!\n• You'll see a number fact, then guess if the next one is **Higher** or **Lower**\n• Build a streak — don't break it!\n\n**First card:** ${items[0].name}\n> **${items[0].val} ${items[0].unit}**\n\n**Next:** ${items[1].name}\nIs it **Higher** or **Lower**?\n\n⭐ Streak: 0`)
+        .setFooter({text:'Click a button to guess!'}).setTimestamp()],components:buildHOLRows(false)});
+      g.idx=1;
       break;
     }
 
@@ -2061,7 +2155,7 @@ client.on('messageCreate', async (message) => {
       const entry=SCRAMBLE_WORDS[Math.floor(Math.random()*SCRAMBLE_WORDS.length)];
       const g={word:entry.word,hint:entry.hint,scrambled:scrambleWord(entry.word),round:1,maxRounds:rounds,scores:{}};
       scrambleGames[message.channel.id]=g;
-      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#F39C12').setTitle('🔀 Scramble').setDescription('*Scrambling a word...*').setTimestamp()]});
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#F39C12').setTitle('🔀 Scramble').setDescription(`📖 **How to play:**\n• **Multiple players** — anyone can answer!\n• A scrambled word will appear — unscramble it!\n• **First to type the correct word** wins the point\n• ${rounds} rounds total\n\n*Scrambling a word...*`).setTimestamp()]});
       await sleep(600);
       await initMsg.edit({embeds:[new EmbedBuilder().setColor('#F39C12').setTitle(`🔀 Scramble — Round 1/${rounds}`)
         .setDescription(`Unscramble this word:\n\n# \`${g.scrambled}\`\n\n💡 **Hint:** ${g.hint}\n\n*Type your answer in chat — anyone can answer!*`)
@@ -2076,11 +2170,71 @@ client.on('messageCreate', async (message) => {
       const puzzle=EMOJI_PUZZLES[Math.floor(Math.random()*EMOJI_PUZZLES.length)];
       const g={puzzle,round:1,maxRounds:rounds,scores:{}};
       emojiDecodeGames[message.channel.id]=g;
-      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#8E44AD').setTitle('🤔 Emoji Decode').setDescription('*Loading emoji puzzle...*').setTimestamp()]});
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#8E44AD').setTitle('🤔 Emoji Decode').setDescription(`📖 **How to play:**\n• **Multiple players** — anyone can answer!\n• Emojis represent a word/phrase — decode them!\n• **First to type the correct answer** wins the point\n• ${rounds} rounds total — no spaces needed in answers\n\n*Loading emoji puzzle...*`).setTimestamp()]});
       await sleep(600);
       await initMsg.edit({embeds:[new EmbedBuilder().setColor('#8E44AD').setTitle(`🤔 Emoji Decode — Round 1/${rounds}`)
         .setDescription(`What do these emojis represent?\n\n# ${puzzle.emojis}\n\n💡 **Hint:** ${puzzle.hint}\n\n*Type your answer in chat — anyone can answer! (no spaces needed)*`)
         .setFooter({text:`${rounds} rounds total • First correct answer gets the point!`}).setTimestamp()]});
+      break;
+    }
+
+    case 'fasttype': case 'ft': {
+      if(fastTypeGames[message.channel.id]) return message.reply('❌ Fast Type already running here!');
+      const sentence = FASTTYPE_SENTENCES[Math.floor(Math.random()*FASTTYPE_SENTENCES.length)];
+      const g = {sentence, winner:null, startTime:null};
+      fastTypeGames[message.channel.id] = g;
+      const readyMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#00BFFF').setTitle('⌨️ Fast Type — Get Ready!')
+        .setDescription(`📖 **How to play:**\n• **Anyone** can participate — no player limit!\n• Type the sentence below **exactly** (case-insensitive)\n• **First to finish** wins!\n• Watch your spelling!\n\n**Get ready... Starting in 3 seconds!**`).setTimestamp()]});
+      await sleep(3000);
+      g.startTime = Date.now();
+      await readyMsg.edit({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('⌨️ Fast Type — GO! 🚀')
+        .setDescription(`**Type this sentence exactly:**\n\n>>> ${sentence}\n\n*First to type it correctly wins! ⏱️*`)
+        .setFooter({text:'Case-insensitive • First correct answer wins!'}).setTimestamp()]});
+      // Auto-cancel after 60s
+      setTimeout(()=>{ if(fastTypeGames[message.channel.id]){delete fastTypeGames[message.channel.id];message.channel.send({embeds:[errorEmbed(`⏱️ Time's up! Nobody finished in time.\n\n**Sentence was:** \`${sentence}\``)]}).catch(()=>{});}},60000);
+      break;
+    }
+
+    case 'truthordare': case 'tod': {
+      const mentionedUsers = [...message.mentions.users.values()].filter(u=>!u.bot);
+      const target = mentionedUsers.length ? mentionedUsers[Math.floor(Math.random()*mentionedUsers.length)] : message.author;
+      const choice = args.includes('truth') ? 'truth' : args.includes('dare') ? 'dare' : Math.random()<0.5?'truth':'dare';
+      const list = choice === 'truth' ? TRUTHS : DARES;
+      const prompt = list[Math.floor(Math.random()*list.length)];
+      message.reply({embeds:[new EmbedBuilder().setColor(choice==='truth'?'#3498DB':'#E74C3C')
+        .setTitle(`${choice==='truth'?'🤔 TRUTH':'🎯 DARE'} — <@${target.id}>`)
+        .setDescription(`**${prompt}**\n\n📖 **How to play:**\n• Mention players to pick a random one: \`!tod @user1 @user2\`\n• Or specify: \`!tod truth\` or \`!tod dare\`\n• Everyone can participate!\n\n👥 **Players:** Anyone!`)
+        .setFooter({text:'Use !tod to get another prompt!'}).setTimestamp()]});
+      break;
+    }
+
+    case 'stopgame': case 'endgame': {
+      if(!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return missingPerm(message,'Manage Messages');
+      const cid = message.channel.id;
+      const uid = message.author.id;
+      let stopped = false;
+      if(tttGames[cid]){delete tttGames[cid];stopped=true;}
+      if(hangmanGames[cid]){delete hangmanGames[cid];stopped=true;}
+      if(triviaGames[cid]){delete triviaGames[cid];stopped=true;}
+      if(guessGames[cid]){delete guessGames[cid];stopped=true;}
+      if(c4Games[cid]){delete c4Games[cid];stopped=true;}
+      if(wordleGames[cid]){delete wordleGames[cid];stopped=true;}
+      if(mathDuelGames[cid]){delete mathDuelGames[cid];stopped=true;}
+      if(wordChainGames[cid]){delete wordChainGames[cid];stopped=true;}
+      if(triviaBattleGames[cid]){delete triviaBattleGames[cid];stopped=true;}
+      if(battleshipGames[cid]){delete battleshipGames[cid];stopped=true;}
+      if(scrambleGames[cid]){delete scrambleGames[cid];stopped=true;}
+      if(emojiDecodeGames[cid]){delete emojiDecodeGames[cid];stopped=true;}
+      if(fastTypeGames[cid]){delete fastTypeGames[cid];stopped=true;}
+      if(rpsGames[cid]){delete rpsGames[cid];stopped=true;}
+      if(bjGames[uid]){delete bjGames[uid];stopped=true;}
+      if(minesGames[uid]){delete minesGames[uid];stopped=true;}
+      if(snakeGames[uid]){delete snakeGames[uid];stopped=true;}
+      if(game2048[uid]){delete game2048[uid];stopped=true;}
+      if(memoryGames[uid]){delete memoryGames[uid];stopped=true;}
+      if(holGames[uid]){delete holGames[uid];stopped=true;}
+      if(dicePokerGames[uid]){delete dicePokerGames[uid];stopped=true;}
+      message.reply({embeds:[stopped?successEmbed('🛑 Game Stopped','All active games in this channel/for this user have been ended.'):errorEmbed('No active games found in this channel.')]});
       break;
     }
 
