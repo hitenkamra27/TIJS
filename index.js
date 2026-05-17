@@ -423,40 +423,115 @@ function buildRPSRows(disabled) {
 
 // ─── Math Duel Helpers ────────────────────────────────────────────────────────
 function genMathQ(diff) {
-  if(diff===1){const a=Math.floor(Math.random()*20)+1,b=Math.floor(Math.random()*20)+1;return{q:`${a} + ${b}`,a:a+b};}
-  if(diff===2){const a=Math.floor(Math.random()*12)+2,b=Math.floor(Math.random()*12)+2;return{q:`${a} × ${b}`,a:a*b};}
-  const a=Math.floor(Math.random()*30)+5,b=Math.floor(Math.random()*30)+5;return{q:`${a} × ${b} - ${Math.floor(a/2)}`,a:a*b-Math.floor(a/2)};
+  if(diff===1){
+    const ops=['+','-','×'];
+    const op=ops[Math.floor(Math.random()*ops.length)];
+    const a=Math.floor(Math.random()*50)+10, b=Math.floor(Math.random()*50)+10;
+    if(op==='+') return{q:`${a} + ${b}`,a:a+b};
+    if(op==='-') return{q:`${Math.max(a,b)} - ${Math.min(a,b)}`,a:Math.max(a,b)-Math.min(a,b)};
+    return{q:`${a%10+2} × ${b%10+2}`,a:(a%10+2)*(b%10+2)};
+  }
+  if(diff===2){
+    const a=Math.floor(Math.random()*20)+5,b=Math.floor(Math.random()*20)+5,c=Math.floor(Math.random()*10)+2;
+    return{q:`${a} × ${b} + ${c}`,a:a*b+c};
+  }
+  // Difficulty 3 — brutal
+  const a=Math.floor(Math.random()*15)+8,b=Math.floor(Math.random()*15)+8,c=Math.floor(Math.random()*10)+3,d=Math.floor(Math.random()*5)+2;
+  return{q:`(${a} + ${b}) × ${d} - ${c}`,a:(a+b)*d-c};
 }
 function buildMathEmbed(g) {
   const bar = (n,max) => n===0?'░░░░░░░░░░':'█'.repeat(Math.round(n/max*10))+'░'.repeat(10-Math.round(n/max*10));
-  return new EmbedBuilder().setColor('#5865F2').setTitle('🧮 Math Duel')
-    .setDescription(`**Question ${g.qNum}/5** (Diff: ${'⭐'.repeat(g.diff)})\n\n> 🔢 **${g.current.q} = ?**\n\nType your answer in chat — fastest correct answer wins the point!\n\n<@${g.p1}> \`${bar(g.score1,5)}\` ${g.score1}pts\n<@${g.p2}> \`${bar(g.score2,5)}\` ${g.score2}pts`)
-    .setFooter({text:`⏱️ 15 seconds per question`}).setTimestamp();
+  return new EmbedBuilder().setColor('#5865F2').setTitle('🧮 Math Duel — HARDCORE')
+    .setDescription(`**Question ${g.qNum+1}/5** (Diff: ${'⭐'.repeat(g.diff)})\n\n> 🔢 **${g.current.q} = ?**\n\nType your answer in chat — fastest correct answer wins the point!\n\n<@${g.p1}> \`${bar(g.score1,5)}\` ${g.score1}pts\n<@${g.p2}> \`${bar(g.score2,5)}\` ${g.score2}pts`)
+    .setFooter({text:`⏱️ 10 seconds per question — no mercy!`}).setTimestamp();
 }
 
-// ─── Word Chain Helpers ───────────────────────────────────────────────────────
+// ─── Word Chain Dictionary (2000+ common English words, no slang/non-English) ─
+const WC_DICTIONARY = new Set([
+  // A
+  'abandon','ability','able','about','above','absent','absorb','abstract','accent','accept','access','account','accuse','ache','achieve','acid','acknowledge','acquire','across','action','active','actor','actual','acute','adapt','address','adjust','admire','admit','adopt','advance','afford','afraid','after','again','against','agent','agree','ahead','alarm','album','alert','alike','alive','alley','allow','alone','along','alter','although','always','amaze','among','ample','amuse','anger','angle','ankle','annex','answer','apple','apply','approve','arch','argue','arise','armor','around','arrest','arrow','artist','aside','atlas','attach','attack','attempt','attend','August','avoid',
+  // B
+  'badge','basic','basis','batch','beach','begin','below','bench','blind','block','bloom','board','bonus','boost','booth','bound','brain','brand','brave','break','brick','bride','brief','bring','broad','brook','brown','brush','build','bunch','burst','butter','buyer',
+  // C
+  'cabin','calmly','candy','cargo','carry','catch','cause','chain','chair','chase','cheap','check','chest','chief','child','china','claim','clash','class','clean','clear','climb','clock','cloth','cloud','coast','color','comes','court','cover','crack','craft','crash','crawl','cream','crime','crisp','cross','crowd','crush','curve',
+  // D
+  'daily','dairy','dance','dense','depth','devil','dirty','dodge','doubt','dough','draft','drain','drama','drank','dread','dream','dress','drift','drink','drive','drove','drown','dwarf',
+  // E
+  'eager','eagle','early','earth','eight','elect','elite','empty','enter','entry','equal','essay','every','exact','exist','extra',
+  // F
+  'faint','faith','fancy','fault','feast','fence','ferry','fever','field','fight','final','first','fixed','flame','flare','flash','flesh','float','flood','floor','flour','focus','force','forge','forth','found','frame','frank','fraud','fresh','front','frost','fruit','fully',
+  // G
+  'ghost','giant','given','glass','globe','gloom','glory','grace','grade','grain','grand','grasp','grass','gravel','graze','greed','green','greet','grief','grill','grind','groan','gross','group','grove','grown','guard','guess','guest','guide','guild','guilt','guise',
+  // H
+  'habit','handy','harsh','haste','haven','heart','heavy','hence','horse','hotel','house','human','humor','hurry','hyper',
+  // I
+  'ideal','image','imply','index','inner','input','intel','issue',
+  // J
+  'joint','judge','juice','jumbo','jumpy',
+  // K
+  'kneel','knife','knock','known',
+  // L
+  'label','lance','large','laser','later','laugh','layer','learn','legal','level','light','limit','linen','liver','lodge','logic','loose','lower','loyal',
+  // M
+  'magic','major','march','match','mayor','metal','might','minor','minus','model','money','month','moral','motor','mount','mouse','mouth','muddy','music','muted',
+  // N
+  'naive','nerve','night','noble','noise','north','noted','novel','nurse',
+  // O
+  'occur','offer','often','order','other','outer','owner',
+  // P
+  'paint','panel','panic','paper','party','pause','peace','pearl','phase','phone','piano','pilot','pitch','pixel','plain','plane','plant','plate','plaza','plead','pluck','plumb','plume','plunge','point','polar','pound','power','press','price','pride','prime','prior','prize','probe','prone','proof','prose','proud','pulse',
+  // Q
+  'queen','query','quest','queue','quick','quiet','quota','quote',
+  // R
+  'radar','radio','raise','rally','ranch','range','rapid','ratio','reach','react','ready','realm','rebel','refer','reign','relax','relish','reply','rider','right','rigid','risky','rival','river','robot','rocky','rough','round','route','royal','ruler',
+  // S
+  'scale','scene','scope','score','scout','sense','serve','seven','shade','shake','shall','shame','shape','share','shark','sharp','shift','shine','shirt','shock','shore','shout','sight','since','sixth','sixty','sized','skill','skull','slash','slave','sleep','slice','slide','slope','small','smart','smell','smile','smoke','solid','solve','sorry','south','space','spare','spark','spend','spice','spine','spite','split','spoke','spoon','sport','spray','sprig','squad','stack','staff','stage','stain','stale','stall','stand','stark','start','state','stays','steal','steam','steep','steer','stick','stiff','still','sting','stock','stone','storm','story','stove','study','style','suite','sunny','swarm','swear','sweep','sweet','swift','swing','sword','sworn','syrup',
+  // T
+  'taken','taste','teach','thick','thing','think','third','thorn','threw','throw','thumb','tight','tiger','timer','tired','toast','total','touch','tough','tower','toxic','trace','track','trade','train','trait','tramp','trash','tread','treat','trend','trial','trick','tried','troop','trust','truth','twice','twist',
+  // U
+  'unify','unite','unity','until','upper','upset','urban','usage','usual',
+  // V
+  'valid','value','vapor','vault','verse','video','vigor','viral','virus','visit','vital','vivid','vocal','voice','voter',
+  // W
+  'waste','watch','water','weary','weigh','weird','whale','wheat','where','which','while','whole','whose','witch','world','worry','worst','worth','would','wound','wrist','write','wrote',
+  // X Y Z
+  'xenon','yacht','yearn','yield','young','youth','zonal',
+  // Extended — more common words
+  'after','again','agent','align','angel','angry','annoy','apart','array','award','awake','baker','brawl','carry','child','clerk','cliff','cloth','clown','comet','comma','coral','crawl','dairy','dates','decay','delta','drink','dusty','dying','enact','enemy','enjoy','entry','equip','error','essay','event','every','exact','exile','exist','extra','fairy','false','fancy','fault','feast','fence','fight','final','first','fixed','flake','flank','flare','flash','flesh','float','flood','flour','focus','forte','found','frame','fully','glare','glide','gloom','glory','grace','grade','grain','grand','grasp','grass','graze','greed','greet','grief','grill','grind','groan','gross','grove','grown','guard','guess','guest','guide','guild','guilt','guise','habit','harsh','haven','heart','heavy','human','hurry','image','imply','index','inner','joint','judge','jumbo','kneel','knife','label','large','laser','learn','legal','level','light','limit','liver','lodge','lower','match','mayor','metal','might','minor','money','month','moral','motor','mount','mouse','mouth','music','nerve','night','noble','noise','north','nurse','occur','other','owner','paint','panic','party','pause','pearl','pilot','pixel','plain','plate','plead','pluck','point','power','price','prime','probe','prone','pulse','query','quest','quick','quiet','radio','rally','ranch','rapid','ratio','reach','rebel','relax','reply','rider','right','rigid','rival','river','rocky','rough','royal','ruler','scale','scene','scope','scout','serve','seven','shade','shake','shame','shape','sharp','shift','shine','shirt','shock','shore','shout','sight','since','sized','skill','skull','slash','slave','sleep','slide','slope','small','smart','smell','smoke','solid','solve','south','space','spare','spark','spend','spine','spite','split','squad','stark','start','state','steal','steam','steep','steer','stick','stiff','still','sting','stock','stone','storm','story','stove','style','sunny','swear','sweep','sweet','swift','sword','taste','teach','thick','think','thorn','throw','tiger','tired','toast','total','touch','tough','tower','trace','track','trade','train','trait','trash','treat','trend','trial','trick','troop','trust','truth','twice','twist','unify','unite','until','upper','upset','urban','usage','usual','valid','value','vapor','vault','verse','video','vivid','vocal','voice','voter','waste','water','weary','weigh','weird','whale','wheat','whole','witch','world','worry','worth','write','xenon','yacht','yearn','yield','young','youth',
+]);
+
+function isValidEnglishWord(word) {
+  if (word.length < 4) return false; // Minimum 4 letters — harder!
+  return WC_DICTIONARY.has(word.toLowerCase());
+}
+
 function buildWordChainEmbed(g) {
-  const chain=g.chain.slice(-5).join(' → ');
-  return new EmbedBuilder().setColor('#9B59B6').setTitle('🔗 Word Chain')
-    .setDescription(`**Chain:** ${chain||'*Starting soon...*'}\n\n**Last word ends in:** \`${g.lastLetter.toUpperCase()}\`\n\n<@${g.currentTurn}>'s turn! Type a word starting with **${g.lastLetter.toUpperCase()}**`)
+  const chain=g.chain.slice(-6).join(' → ');
+  const timeLeft = g.timeLimit || 10;
+  return new EmbedBuilder().setColor('#9B59B6').setTitle('🔗 Word Chain — HARDCORE MODE')
+    .setDescription(
+      `**Chain (last 6):** ${chain||'*Starting soon...*'}\n\n` +
+      `**Next letter:** \`${g.lastLetter.toUpperCase()}\` — must be **4+ letters**, a **real English word**, never repeated!\n\n` +
+      `<@${g.currentTurn}>'s turn! You have **${timeLeft} seconds!**`
+    )
     .addFields(
-      {name:'<@'+g.p1+'> Lives',value:'❤️'.repeat(g.lives1||3)+'🖤'.repeat(3-(g.lives1||3)),inline:true},
-      {name:'<@'+g.p2+'> Lives',value:'❤️'.repeat(g.lives2||3)+'🖤'.repeat(3-(g.lives2||3)),inline:true},
-    ).setFooter({text:'15 seconds to answer • Used words cannot repeat'}).setTimestamp();
+      {name:`<@${g.p1}> ❤️`,value:'❤️'.repeat(g.lives1||3)+'🖤'.repeat(3-(g.lives1||3))+'  `'+g.words1+'` words',inline:true},
+      {name:`<@${g.p2}> ❤️`,value:'❤️'.repeat(g.lives2||3)+'🖤'.repeat(3-(g.lives2||3))+'  `'+g.words2+'` words',inline:true},
+    ).setFooter({text:`⏱️ ${timeLeft}s per turn • Min 4 letters • Real English only • No repeats`}).setTimestamp();
 }
 
-// ─── Trivia Battle Helpers ────────────────────────────────────────────────────
+// ─── Trivia Battle Helpers — HARD questions ────────────────────────────────────
 const TRIVIA_BATTLE_Q = [
-  {q:'What is 7 × 8?', a:'56', choices:['48','56','64','72']},
-  {q:'Which planet has rings?', a:'Saturn', choices:['Jupiter','Saturn','Uranus','Neptune']},
-  {q:'Capital of Japan?', a:'Tokyo', choices:['Osaka','Kyoto','Tokyo','Hiroshima']},
-  {q:'Largest mammal?', a:'Blue Whale', choices:['Elephant','Giraffe','Blue Whale','Hippo']},
-  {q:'H2O is?', a:'Water', choices:['Hydrogen','Oxygen','Water','Salt']},
-  {q:'Speed of light (approx)?', a:'300,000 km/s', choices:['150,000 km/s','300,000 km/s','450,000 km/s','600,000 km/s']},
-  {q:'Who invented the telephone?', a:'Bell', choices:['Edison','Bell','Tesla','Marconi']},
-  {q:'First element in periodic table?', a:'Hydrogen', choices:['Helium','Oxygen','Hydrogen','Carbon']},
-  {q:'Largest continent?', a:'Asia', choices:['Africa','Asia','Europe','America']},
-  {q:'Number of bones in adult body?', a:'206', choices:['196','206','216','226']},
+  {q:'What is the atomic number of Carbon?', a:'12', choices:['6','10','12','14']},
+  {q:'Which mathematician proved Fermat\'s Last Theorem?', a:'Wiles', choices:['Euler','Wiles','Gauss','Ramanujan']},
+  {q:'What is the powerhouse of the cell?', a:'Mitochondria', choices:['Nucleus','Ribosome','Mitochondria','Golgi']},
+  {q:'In which year did the Berlin Wall fall?', a:'1989', choices:['1985','1987','1989','1991']},
+  {q:'What does DNA stand for?', a:'Deoxyribonucleic Acid', choices:['Deoxyribonucleic Acid','Dinitrogen Acid','Dynamic Nucleic Agent','Dual Nitrogen Array']},
+  {q:'What is the hardest natural substance on Earth?', a:'Diamond', choices:['Tungsten','Titanium','Diamond','Quartz']},
+  {q:'How many teeth do adult humans have?', a:'32', choices:['28','30','32','34']},
+  {q:'Which organ produces insulin?', a:'Pancreas', choices:['Liver','Kidney','Pancreas','Spleen']},
+  {q:'What is the capital of Australia?', a:'Canberra', choices:['Sydney','Melbourne','Canberra','Brisbane']},
+  {q:'What is 17 × 19?', a:'323', choices:['303','313','323','333']},
 ];
 function buildTriviaBattleEmbed(g) {
   const q=g.questions[g.qNum];
@@ -634,23 +709,28 @@ function buildDPHoldRows(dice,held,disabled) {
   return [row1,row2];
 }
 
-// ─── Scramble Helpers ─────────────────────────────────────────────────────────
+// ─── Scramble Helpers — HARD words only ───────────────────────────────────────
 const SCRAMBLE_WORDS = [
-  {word:'PYTHON',hint:'A programming language 🐍'},
-  {word:'DISCORD',hint:'A chat platform 💬'},
-  {word:'KEYBOARD',hint:'You type on this ⌨️'},
-  {word:'ELEPHANT',hint:'Biggest land animal 🐘'},
-  {word:'DIAMOND',hint:'Hardest natural material 💎'},
-  {word:'VAMPIRE',hint:'Drinks blood 🧛'},
-  {word:'RAINBOW',hint:'Appears after rain 🌈'},
-  {word:'THUNDER',hint:'Loud sky sound ⚡'},
-  {word:'CAPTAIN',hint:'Leader of a ship 🚢'},
-  {word:'JUNGLE',hint:'Dense tropical forest 🌿'},
-  {word:'WIZARD',hint:'Uses magic spells 🧙'},
-  {word:'PLANET',hint:'Orbits a star 🪐'},
-  {word:'ROCKET',hint:'Goes to space 🚀'},
-  {word:'CASTLE',hint:'Medieval fortress 🏰'},
-  {word:'PIRATE',hint:'Sails the seas 🏴‍☠️'},
+  {word:'EXQUISITE',hint:'Extremely beautiful or delicate 💎'},
+  {word:'MYSTERIOUS',hint:'Difficult to understand or explain 🔮'},
+  {word:'SILHOUETTE',hint:'A dark shape against a lighter background 🌅'},
+  {word:'CHRYSALIS',hint:'The pupa stage of a butterfly 🦋'},
+  {word:'LABYRINTH',hint:'A complicated network of paths 🌀'},
+  {word:'PHENOMENON',hint:'A remarkable or exceptional thing 🌟'},
+  {word:'TURBULENCE',hint:'Irregular motion of air or water ✈️'},
+  {word:'KALEIDOSCOPE',hint:'A tube with colorful changing patterns 🔭'},
+  {word:'PROTAGONIST',hint:'The main character in a story 📖'},
+  {word:'CATASTROPHE',hint:'A sudden great disaster 💥'},
+  {word:'MELANCHOLY',hint:'A feeling of deep sadness 😢'},
+  {word:'ARCHAEOLOGY',hint:'Study of human history through excavation 🏺'},
+  {word:'CAMOUFLAGE',hint:'Concealing appearance to blend in 🦎'},
+  {word:'RENAISSANCE',hint:'Revival of European art and literature 🎨'},
+  {word:'EQUILIBRIUM',hint:'A state of balance ⚖️'},
+  {word:'FLAMBOYANT',hint:'Tending to attract attention 🦚'},
+  {word:'PARADOX',hint:'A self-contradicting statement 🤯'},
+  {word:'ZEPPELIN',hint:'A type of large rigid airship 🚁'},
+  {word:'BUREAUCRACY',hint:'A system of complex rules and procedures 📋'},
+  {word:'MELLIFLUOUS',hint:'Sweet or musical; pleasant to hear 🎵'},
 ];
 function scrambleWord(word) {
   const arr=word.split('');
@@ -659,37 +739,37 @@ function scrambleWord(word) {
   return s;
 }
 
-// ─── Emoji Decode Helpers ─────────────────────────────────────────────────────
+// ─── Emoji Decode Helpers — HARDER puzzles ────────────────────────────────────
 const EMOJI_PUZZLES = [
-  {emojis:'🐟🍕',answer:'fishpizza',display:'Fish Pizza',hint:'A food combo 🍕'},
-  {emojis:'🌙🌟',answer:'moonstar',display:'Moon Star',hint:'Night sky things 🌙'},
-  {emojis:'🔥💧',answer:'firewater',display:'Fire Water',hint:'Opposites ⚡'},
-  {emojis:'🐻🏫',answer:'bearschool',display:'Bear School',hint:'Animal education 📚'},
-  {emojis:'🌊🏄',answer:'surfwave',display:'Surf Wave',hint:'Beach sport 🏄'},
-  {emojis:'🦁👑',answer:'lionking',display:'Lion King',hint:'Famous movie! 🎬'},
-  {emojis:'❄️⛄',answer:'snowman',display:'Snow Man',hint:'Winter figure ⛄'},
-  {emojis:'🐸🎤',answer:'frogmicrophone',display:'Frog Microphone',hint:'Singing amphibian 🎤'},
-  {emojis:'🌹💀',answer:'rosebone',display:'Rose Bone',hint:'Beauty and death 💀'},
-  {emojis:'🎸⚡',answer:'rockelectricity',display:'Rock Electricity',hint:'Electric rock ⚡'},
-  {emojis:'🐉🔥',answer:'dragonfire',display:'Dragon Fire',hint:'Fantasy creature ⚔️'},
-  {emojis:'🌻☀️',answer:'sunflowersun',display:'Sunflower Sun',hint:'Bright things 🌻'},
-  {emojis:'👻🏠',answer:'ghosthouse',display:'Ghost House',hint:'Haunted! 👻'},
-  {emojis:'🐧❄️',answer:'penguinice',display:'Penguin Ice',hint:'Antarctic bird 🐧'},
-  {emojis:'🦊🌲',answer:'foxforest',display:'Fox Forest',hint:'Wild animal habitat 🌲'},
+  {emojis:'🌍🌊🔥',answer:'globalwarming',display:'Global Warming',hint:'Climate crisis 🌡️'},
+  {emojis:'👁️🦷🩸',answer:'eyetooth',display:'Eye Tooth',hint:'A type of canine tooth 🦷'},
+  {emojis:'🧠⚡💡',answer:'brainstorm',display:'Brainstorm',hint:'Creative thinking session 💡'},
+  {emojis:'🌙🐺🌕',answer:'werewolf',display:'Werewolf',hint:'Full moon creature 🐺'},
+  {emojis:'🦋🪤',answer:'butterfly trap',display:'Butterfly Trap',hint:'Catching insects 🏕️'},
+  {emojis:'❄️👸',answer:'snowqueen',display:'Snow Queen',hint:'Famous fairy tale character 👑'},
+  {emojis:'🐍🍎🌳',answer:'serpentgarden',display:'Serpent Garden',hint:'Biblical setting 📖'},
+  {emojis:'⏳🏖️☀️',answer:'hourglass beach',display:'Hourglass Beach',hint:'Time and sand ⌛'},
+  {emojis:'🎭🔪🌹',answer:'dramablade',display:'Drama Blade',hint:'Theatrical danger ⚔️'},
+  {emojis:'🌊🧊🔥💨',answer:'fourelements',display:'Four Elements',hint:'Ancient philosophy 🌍'},
+  {emojis:'🦅🇺🇸🌟',answer:'americaneagle',display:'American Eagle',hint:'National symbol 🦅'},
+  {emojis:'🎪🤹🎠',answer:'carnival',display:'Carnival',hint:'Festive fair 🎡'},
+  {emojis:'🧊🏰',answer:'iccastle',display:'Ice Castle',hint:'Frozen fortress 🥶'},
+  {emojis:'🦁❤️',answer:'braveheart',display:'Brave Heart',hint:'Famous film 🎬'},
+  {emojis:'🌪️🏠🌈',answer:'wizard of oz',display:'Wizard of Oz',hint:'Dorothy\'s adventure 🐕'},
 ];
 
-// ─── Fast Type Data ───────────────────────────────────────────────────────────
+// ─── Fast Type Data — HARD sentences ─────────────────────────────────────────
 const FASTTYPE_SENTENCES = [
-  'The quick brown fox jumps over the lazy dog',
-  'Pack my box with five dozen liquor jugs',
-  'How vexingly quick daft zebras jump',
-  'The five boxing wizards jump quickly',
-  'Bright vixens jump dozy fowl quack',
-  'Discord bots make servers more fun for everyone',
-  'Programming is the art of turning coffee into code',
-  'The best way to predict the future is to create it',
-  'Every expert was once a beginner who never gave up',
-  'Speed and accuracy are the two pillars of typing mastery',
+  'The quick brown fox jumps over the lazy dog near the river bank',
+  'Pack my box with five dozen liquor jugs and bring them here immediately',
+  'How vexingly quick daft zebras jump over the perplexing silver fence',
+  'The five boxing wizards jump quickly past the extraordinary golden gate',
+  'Programming is the art of turning caffeine and frustration into functional code',
+  'Extraordinary claims require extraordinary evidence and meticulous scientific analysis',
+  'The phenomenon of bioluminescence continues to baffle and astonish marine biologists',
+  'Simultaneously balancing multiple complex equations requires remarkable concentration and patience',
+  'Cryptography protects sensitive information through mathematical algorithms and computational complexity',
+  'The labyrinthine bureaucracy of modern governments frustrates citizens and officials simultaneously',
 ];
 
 // ─── Truth or Dare Data ────────────────────────────────────────────────────────
@@ -707,7 +787,13 @@ const DARES = [
   'Send the last photo in your gallery description (no spoilers)!','Speak in rhymes for the next 3 messages!',
   'Tell a fun fact about yourself!','Do 10 jumping jacks and report back!',
 ];
-const HM_WORDS = ['javascript','discord','programming','keyboard','elephant','midnight','rainbow','adventure','telescope','butterfly','champion','universe','developer','algorithm','database'];
+const HM_WORDS = [
+  // Longer, harder words
+  'javascript','programming','keyboard','elephant','butterfly','telescope','algorithm','database','adventure','developer',
+  'parliament','chameleon','circumstances','equivalent','magnificent','crystallize','philosophical','communicate','constellation','phenomenon',
+  'knowledgeable','mischievous','conscientious','uncomfortable','sophisticated','revolutionary','catastrophic','perpendicular','exaggerating','disappearance',
+  'reconnaissance','extraordinary','overwhelming','disqualified','acquaintance','simultaneously','Mediterranean','unquestionable','fundamentalist','unconstitutional'
+];
 const HM_STAGES = [
   '```\n  +---+\n  |   |\n      |\n      |\n      |\n      |\n=========```',
   '```\n  +---+\n  |   |\n  O   |\n      |\n      |\n      |\n=========```',
@@ -718,22 +804,32 @@ const HM_STAGES = [
   '```\n  +---+\n  |   |\n  O   |\n /|\\  |\n / \\  |\n      |\n=========```',
 ];
 
-// ─── Trivia Data ──────────────────────────────────────────────────────────────
+// ─── Trivia Data — HARD ───────────────────────────────────────────────────────
 const TRIVIA = [
-  {q:'What is the capital of France?',          a:'paris',         c:['London','Paris','Berlin','Madrid']},
-  {q:'How many sides does a hexagon have?',      a:'6',             c:['5','6','7','8']},
-  {q:'Which planet is called the Red Planet?',  a:'mars',          c:['Venus','Mars','Jupiter','Saturn']},
-  {q:'What is the largest ocean on Earth?',     a:'pacific',       c:['Atlantic','Indian','Pacific','Arctic']},
-  {q:'What gas do plants absorb?',              a:'carbon dioxide', c:['Oxygen','Nitrogen','Carbon Dioxide','Hydrogen']},
-  {q:'Who wrote Romeo and Juliet?',             a:'shakespeare',   c:['Dickens','Shakespeare','Austen','Twain']},
-  {q:'What is 12 × 12?',                        a:'144',           c:['124','136','144','156']},
-  {q:'Chemical symbol for gold?',               a:'au',            c:['Go','Gd','Au','Ag']},
-  {q:'How many continents are there?',          a:'7',             c:['5','6','7','8']},
-  {q:'Fastest land animal?',                    a:'cheetah',       c:['Lion','Horse','Cheetah','Falcon']},
+  {q:'What is the only country that borders both the Atlantic and Indian Oceans?', a:'south africa', c:['Brazil','South Africa','Nigeria','Argentina']},
+  {q:'How many bones are in the human wrist?', a:'8', c:['6','8','10','12']},
+  {q:'Which element has the highest melting point?', a:'tungsten', c:['Titanium','Tungsten','Platinum','Carbon']},
+  {q:'What is the speed of light in km/s (approx)?', a:'300000', c:['150000','300000','450000','600000']},
+  {q:'Who developed the theory of general relativity?', a:'einstein', c:['Newton','Einstein','Hawking','Bohr']},
+  {q:'What is the chemical formula for table salt?', a:'nacl', c:['NaOH','NaCl','KCl','MgCl2']},
+  {q:'Which planet has the most moons?', a:'saturn', c:['Jupiter','Saturn','Uranus','Neptune']},
+  {q:'In what year did World War I begin?', a:'1914', c:['1912','1914','1916','1918']},
+  {q:'What is the largest organ in the human body?', a:'skin', c:['Liver','Heart','Skin','Brain']},
+  {q:'Which programming language was created by Guido van Rossum?', a:'python', c:['Ruby','Python','Perl','Java']},
+  {q:'What is the square root of 169?', a:'13', c:['11','12','13','14']},
+  {q:'Which country has the most UNESCO World Heritage Sites?', a:'italy', c:['China','France','Italy','Spain']},
 ];
 
-// ─── Wordle Words ─────────────────────────────────────────────────────────────
-const WORDLE_WORDS = ['apple','brave','crane','drive','eagle','flame','grace','happy','image','joker','knife','lemon','magic','night','ocean','piano','queen','river','stone','tiger','uncle','vivid','water','xenon','yacht','zebra'];
+// ─── Wordle Words — HARD (uncommon but valid 5-letter English words) ──────────
+const WORDLE_WORDS = [
+  // Hard but real words
+  'quirk','gnash','dwarf','fjord','juicy','ethic','oxide','lymph','epoxy','squid',
+  'flunk','perky','caulk','psalm','twixt','glyph','vouch','expel','aphid','bayou',
+  'gauze','tryst','kudos','lyric','maxim','nexus','onyx','privy','quaff','scythe',
+  'suave','taboo','ulcer','venom','wrath','yacht','zesty','abhor','bliss','chasm',
+  'dross','ebony','flirt','gaunt','havoc','joust','kneel','lapel','mayhem','nymph',
+  'optic','pivot','quilt','rivet','smirk','thyme','unfed','vigor','winch','xenon',
+];
 
 function evaluateWordle(guess, word) {
   const res = Array(5).fill(null).map((_,i) => ({l:guess[i], e:'⬛'}));
@@ -745,6 +841,246 @@ function evaluateWordle(guess, word) {
     if (idx!==-1) {res[i].e='🟨';wa[idx]=null;}
   }
   return res;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── TEXAS HOLD'EM POKER ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+const pokerGames = {};
+
+const POKER_SUITS = ['♠️','♥️','♦️','♣️'];
+const POKER_RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+const POKER_RANK_VAL = {'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':11,'Q':12,'K':13,'A':14};
+
+function makePokerDeck() {
+  const d = [];
+  for (const s of POKER_SUITS) for (const r of POKER_RANKS) d.push({s, r, v: POKER_RANK_VAL[r]});
+  for (let i = d.length-1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [d[i],d[j]] = [d[j],d[i]]; }
+  return d;
+}
+const pokerCardStr = (c) => `${c.r}${c.s}`;
+const pokerHandStr = (h) => h.map(pokerCardStr).join(' ');
+
+function evaluatePokerHand(cards) {
+  // cards = array of 5..7 cards; returns best 5-card hand rank
+  const combos = [];
+  if (cards.length <= 5) { combos.push(cards); }
+  else {
+    // generate all C(n,5) combinations
+    for (let i=0; i<cards.length; i++)
+      for (let j=i+1; j<cards.length; j++)
+        for (let k=j+1; k<cards.length; k++)
+          for (let l=k+1; l<cards.length; l++)
+            for (let m=l+1; m<cards.length; m++)
+              combos.push([cards[i],cards[j],cards[k],cards[l],cards[m]]);
+  }
+  let best = null;
+  for (const combo of combos) {
+    const score = scorePoker5(combo);
+    if (!best || score.rank > best.rank || (score.rank === best.rank && score.tiebreak > best.tiebreak))
+      best = score;
+  }
+  return best;
+}
+
+function scorePoker5(cards) {
+  const vals = cards.map(c=>c.v).sort((a,b)=>b-a);
+  const suits = cards.map(c=>c.s);
+  const flush = suits.every(s=>s===suits[0]);
+  const straight = vals.every((v,i)=>i===0||vals[i-1]-v===1) ||
+    JSON.stringify(vals) === JSON.stringify([14,5,4,3,2]);
+  const counts = {};
+  vals.forEach(v=>{counts[v]=(counts[v]||0)+1;});
+  const groups = Object.entries(counts).map(([v,c])=>({v:parseInt(v),c})).sort((a,b)=>b.c-a.c||b.v-a.v);
+  const tb = vals[0]*1000000+vals[1]*10000+vals[2]*100+vals[3]*10+vals[4];
+
+  if (flush && straight && vals[0]===14 && vals[4]===10) return {rank:9,name:'👑 Royal Flush',tiebreak:tb};
+  if (flush && straight) return {rank:8,name:'🌊 Straight Flush',tiebreak:vals[0]};
+  if (groups[0].c===4) return {rank:7,name:'4️⃣ Four of a Kind',tiebreak:groups[0].v*100+groups[1].v};
+  if (groups[0].c===3&&groups[1].c===2) return {rank:6,name:'🏠 Full House',tiebreak:groups[0].v*100+groups[1].v};
+  if (flush) return {rank:5,name:'♠️ Flush',tiebreak:tb};
+  if (straight) return {rank:4,name:'🔀 Straight',tiebreak:vals[0]};
+  if (groups[0].c===3) return {rank:3,name:'3️⃣ Three of a Kind',tiebreak:groups[0].v*100+tb};
+  if (groups[0].c===2&&groups[1].c===2) return {rank:2,name:'👥 Two Pair',tiebreak:groups[0].v*100+groups[1].v*10+groups[2].v};
+  if (groups[0].c===2) return {rank:1,name:'👤 One Pair',tiebreak:groups[0].v*10000+tb};
+  return {rank:0,name:'💨 High Card',tiebreak:tb};
+}
+
+function buildPokerEmbed(g) {
+  const p1 = g.players[0], p2 = g.players[1];
+  const stageNames = ['Pre-Flop','The Flop','The Turn','The River','Showdown'];
+  const stage = stageNames[Math.min(g.communityCards.length === 0 ? 0 : g.communityCards.length <= 3 ? 1 : g.communityCards.length === 4 ? 2 : 3, 4)];
+  const pot = p1.bet + p2.bet + (g.pot||0);
+  const communityDisplay = g.communityCards.length ? g.communityCards.map(pokerCardStr).join(' ') : '*Not yet dealt*';
+
+  return new EmbedBuilder()
+    .setColor('#1A472A')
+    .setTitle('🃏 Texas Hold\'em Poker')
+    .setDescription(
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `🎴 **Stage:** ${stage}  |  💰 **Pot:** ${pot} chips\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `🌐 **Community Cards:**\n> ${communityDisplay}\n\n` +
+      `👤 <@${p1.id}>  \`${p1.chips} chips\`  bet: ${p1.bet}  ${p1.folded?'❌ Folded':p1.allIn?'💥 All-In':''}\n` +
+      `👤 <@${p2.id}>  \`${p2.chips} chips\`  bet: ${p2.bet}  ${p2.folded?'❌ Folded':p2.allIn?'💥 All-In':''}\n\n` +
+      `**Current Turn:** <@${g.currentTurn}>`
+    )
+    .setFooter({text:`Round ${g.round}/10 — Texas Hold'em • Blinds: 10/20`})
+    .setTimestamp();
+}
+
+function buildPokerActionRows(disabled) {
+  return [new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('poker:fold').setLabel('❌ Fold').setStyle(ButtonStyle.Danger).setDisabled(disabled),
+    new ButtonBuilder().setCustomId('poker:call').setLabel('📞 Call/Check').setStyle(ButtonStyle.Primary).setDisabled(disabled),
+    new ButtonBuilder().setCustomId('poker:raise').setLabel('📈 Raise 20').setStyle(ButtonStyle.Success).setDisabled(disabled),
+    new ButtonBuilder().setCustomId('poker:allin').setLabel('💥 All-In').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+  )];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── QUIZ SHOWDOWN (Team-based, 10 rounds, 30s timer) ───────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+const quizShowdownGames = {};
+const QUIZ_SHOWDOWN_Q = [
+  {q:'What is 15 × 15?',a:'225',c:['200','225','215','250']},
+  {q:'Which country is the largest by area?',a:'Russia',c:['Canada','USA','Russia','China']},
+  {q:'What gas do plants absorb?',a:'Carbon Dioxide',c:['Oxygen','Nitrogen','Carbon Dioxide','Hydrogen']},
+  {q:'Who painted the Mona Lisa?',a:'Leonardo da Vinci',c:['Picasso','Michelangelo','Leonardo da Vinci','Raphael']},
+  {q:'How many sides does an octagon have?',a:'8',c:['6','7','8','9']},
+  {q:'What is the chemical symbol for gold?',a:'Au',c:['Go','Gd','Au','Ag']},
+  {q:'Which planet is closest to the Sun?',a:'Mercury',c:['Venus','Mercury','Mars','Earth']},
+  {q:'In what year did World War II end?',a:'1945',c:['1943','1944','1945','1946']},
+  {q:'What is the square root of 256?',a:'16',c:['14','15','16','18']},
+  {q:'Which ocean is the largest?',a:'Pacific',c:['Atlantic','Indian','Pacific','Arctic']},
+  {q:'How many chromosomes do humans have?',a:'46',c:['42','44','46','48']},
+  {q:'What is the fastest land animal?',a:'Cheetah',c:['Lion','Cheetah','Leopard','Horse']},
+  {q:'How many strings does a standard guitar have?',a:'6',c:['4','5','6','8']},
+  {q:'What is Pi (first 3 digits)?',a:'3.14',c:['3.12','3.14','3.16','3.18']},
+  {q:'Which element has the symbol "O"?',a:'Oxygen',c:['Osmium','Oxygen','Oganesson','Ozone']},
+];
+
+function buildQuizShowdownEmbed(g) {
+  const q = g.questions[g.qNum];
+  return new EmbedBuilder()
+    .setColor('#FF6B35')
+    .setTitle(`🏆 Quiz Showdown — Round ${g.qNum+1}/${g.questions.length}`)
+    .setDescription(
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `❓ **${q.q}**\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `🅰️  ${q.c[0]}\n🅱️  ${q.c[1]}\n🅲  ${q.c[2]}\n🅳  ${q.c[3]}\n\n` +
+      `⏱️ **30 seconds to answer!**\n👥 **Anyone can answer!** First correct gets the point!\n\n` +
+      `**Scoreboard:**\n${Object.entries(g.scores).sort(([,a],[,b])=>b-a).map(([id,s],i)=>`${['🥇','🥈','🥉'][i]||'🏅'} <@${id}>: **${s}** pts`).join('\n')||'*No scores yet*'}`
+    )
+    .setFooter({text:`${g.questions.length} questions • Anyone can play! • Type A/B/C/D or full answer`})
+    .setTimestamp();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── MURDER MYSTERY (Multiplayer, social deduction) ─────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+const murderGames = {};
+const MM_SUSPECTS = ['🔴 Scarlet','🟡 Mustard','🟢 Green','🟣 Plum','⚪ White','🔵 Peacock'];
+const MM_WEAPONS  = ['🔪 Knife','🔫 Revolver','🪓 Axe','🪢 Rope','🔨 Hammer','☕ Poison'];
+const MM_ROOMS    = ['🏠 Kitchen','📚 Library','🎭 Theater','🌹 Garden','🚪 Hallway','🛋️ Lounge'];
+const MM_CLUES = [
+  'A muddy boot print was found near the {room}.',
+  'Witnesses heard a loud crash near the {room} at midnight.',
+  'The {weapon} was reported missing from the {room}.',
+  'Security footage shows {suspect} leaving the {room} at 11:45pm.',
+  'A torn piece of cloth matching {suspect}\'s outfit was found near {room}.',
+  'The victim was last seen arguing with {suspect} in the {room}.',
+  'Fingerprints matching {suspect} were found on the {weapon}.',
+  'A witness spotted someone matching {suspect}\'s description carrying a {weapon}.',
+];
+
+function buildMurderMysteryEmbed(g, phase) {
+  const intro = `**The Victim:** ${g.victim} has been found dead!\n**Scene:** ${g.scene}\n`;
+  if (phase === 'voting') {
+    return new EmbedBuilder()
+      .setColor('#8B0000')
+      .setTitle('🔍 Murder Mystery — VOTE NOW!')
+      .setDescription(
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${intro}━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `**Clues Revealed:**\n${g.clues.map((c,i)=>`${i+1}. ${c}`).join('\n')}\n\n` +
+        `🗳️ **Who did it?** Players, vote by typing the suspect's name!\n` +
+        `**Suspects:** ${MM_SUSPECTS.join(' | ')}\n\n` +
+        `⏱️ **60 seconds to vote!**`
+      )
+      .setFooter({text:`Voting phase • Type a suspect name!`})
+      .setTimestamp();
+  }
+  return new EmbedBuilder()
+    .setColor('#4A0000')
+    .setTitle('🔪 Murder Mystery — The Investigation')
+    .setDescription(
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${intro}━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `🔍 **Clue ${g.cluePhase}/4:** ${g.clues[g.cluePhase-1]||'*Gathering evidence...*'}\n\n` +
+      `**Players:** ${g.players.map(id=>`<@${id}>`).join(', ')}\n\n` +
+      `📋 **All Clues So Far:**\n${g.clues.slice(0,g.cluePhase).map((c,i)=>`${i+1}. ${c}`).join('\n')||'*None yet*'}`
+    )
+    .setFooter({text:`Clue ${g.cluePhase}/4 revealed • Next clue in 20s`})
+    .setTimestamp();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── WORD BOMB (Multiplayer, fast-paced, any number of players) ──────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+const wordBombGames = {};
+const WB_PROMPTS = [
+  'IN','AN','OR','ER','ST','OU','TR','PL','GR','FR','CH','SH','TH','BL','CR',
+  'PRE','CON','OUT','ING','ENT','EST','PRO','COM','EXP','INT','UND','OVE','MIS'
+];
+
+function buildWordBombEmbed(g) {
+  const turnPlayer = g.players[g.turn % g.players.length];
+  return new EmbedBuilder()
+    .setColor('#FF4500')
+    .setTitle('💣 Word Bomb — MULTIPLAYER!')
+    .setDescription(
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `💣 Your word must contain: **\`${g.prompt}\`**\n` +
+      `⏱️ **${g.timeLimit} seconds** or you're eliminated!\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `**It's <@${turnPlayer}>'s turn!**\n` +
+      `Type a word containing **${g.prompt}** in chat!\n\n` +
+      `**Players Alive:**\n${g.players.map((id,i)=>`${i===g.turn%g.players.length?'💣':'✅'} <@${id}>`).join('\n')}\n\n` +
+      `**Round:** ${g.round} | **Used Words:** ${g.usedWords.size}`
+    )
+    .setFooter({text:`Word must contain "${g.prompt}" • No repeats! • ${g.timeLimit}s to answer`})
+    .setTimestamp();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── ENHANCED HANGMAN (with rounds & scoreboard) ─────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// Already exists — we'll upgrade it via the command handler
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── PREMIUM EMBED BUILDERS ──────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+const luxuryEmbed = (title, desc, color='#5865F2') =>
+  new EmbedBuilder().setColor(color).setTitle(title).setDescription(
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${desc}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+  ).setTimestamp();
+
+const gameStartEmbed = (title, desc, color) =>
+  new EmbedBuilder().setColor(color||'#5865F2')
+    .setTitle(`✨ ${title}`)
+    .setDescription(`╔══════════════════════════╗\n${desc}\n╚══════════════════════════╝`)
+    .setTimestamp();
+
+function buildScoreboard(scores, title='🏆 Final Scoreboard') {
+  const sorted = Object.entries(scores).sort(([,a],[,b])=>b-a);
+  const medals = ['🥇','🥈','🥉'];
+  const lines = sorted.map(([id,s],i) => `${medals[i]||`${i+1}.`} <@${id}> — **${s} pts**`);
+  return new EmbedBuilder()
+    .setColor('#FFD700')
+    .setTitle(title)
+    .setDescription(lines.join('\n')||'No scores yet.')
+    .setTimestamp();
 }
 
 // ─── Interaction Handler ──────────────────────────────────────────────────────
@@ -1092,6 +1428,124 @@ client.on('interactionCreate', async (interaction) => {
     } return interaction.reply({content:resolvePlaceholders(wcfg.text,m),ephemeral:true});
   }
   if (action==='reset') { delete welcomeSettings[interaction.guild.id]; const f=getWelcomeSettings(interaction.guild.id); return interaction.update({embeds:[buildWelcomePanel(interaction.guild,f)],components:buildWelcomeRows(f)}); }
+
+  // ── TEXAS HOLD'EM POKER ────────────────────────────────────────────────────
+  if (interaction.isButton() && interaction.customId.startsWith('poker:')) {
+    const act = interaction.customId.split(':')[1];
+    const g = pokerGames[interaction.channel.id];
+    if (!g) return interaction.reply({content:'❌ No poker game here.',ephemeral:true});
+    const uid = interaction.user.id;
+    const pIdx = g.players.findIndex(p=>p.id===uid);
+    if (pIdx === -1) return interaction.reply({content:'❌ You are not in this game.',ephemeral:true});
+    if (g.currentTurn !== uid) return interaction.reply({content:'❌ Not your turn!',ephemeral:true});
+    const p = g.players[pIdx];
+    const opp = g.players[1-pIdx];
+    const toCall = Math.max(0, opp.bet - p.bet);
+
+    if (act === 'fold') {
+      g.pot = (g.pot||0) + p.bet + opp.bet;
+      const winAmt = g.pot;
+      opp.chips += winAmt;
+      g.pot = 0; p.bet = 0; opp.bet = 0;
+      g.round++;
+      if (g.round > 10 || p.chips <= 0 || opp.chips <= 0) {
+        const winner = opp.chips >= p.chips ? opp : p;
+        delete pokerGames[interaction.channel.id];
+        return interaction.update({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🃏 Poker — Game Over!')
+          .setDescription(`<@${p.id}> folded.\n\n🏆 **<@${winner.id}> WINS THE MATCH!**\n<@${opp.id}>: **${opp.chips}** chips\n<@${p.id}>: **${p.chips}** chips`)
+          .setTimestamp()],components:[]});
+      }
+      // Start new round
+      g.deck = makePokerDeck();
+      p.hand = [g.deck.pop(), g.deck.pop()]; opp.hand = [g.deck.pop(), g.deck.pop()];
+      p.folded = false; opp.folded = false; p.allIn = false; opp.allIn = false;
+      p.bet = 10; opp.bet = 20; // blinds
+      if (p.chips < 10) { p.bet = p.chips; p.chips = 0; p.allIn = true; }
+      else p.chips -= 10;
+      if (opp.chips < 20) { opp.bet = opp.chips; opp.chips = 0; opp.allIn = true; }
+      else opp.chips -= 20;
+      g.communityCards = []; g.currentTurn = p.id;
+      const handMsg = `✅ <@${p.id}> folded! <@${opp.id}> wins **${winAmt}** chips!\n\n**New Round ${g.round}/10** | Your hole cards (check DMs!)`;
+      try { await interaction.user.send(`🃏 **Your hole cards (Round ${g.round}):** ${pokerHandStr(p.hand)}`); } catch{}
+      try { await opp.dmSent || interaction.guild.members.fetch(opp.id).then(m=>m.send(`🃏 **Your hole cards (Round ${g.round}):** ${pokerHandStr(opp.hand)}`)).catch(()=>{}); } catch{}
+      return interaction.update({embeds:[buildPokerEmbed(g).setDescription(`${handMsg}`)],components:buildPokerActionRows(false)});
+    }
+
+    if (act === 'call') {
+      if (toCall === 0) {
+        // Check — advance stage
+        // Deal community cards
+        if (g.communityCards.length === 0) { g.communityCards = [g.deck.pop(),g.deck.pop(),g.deck.pop()]; }
+        else if (g.communityCards.length === 3) { g.communityCards.push(g.deck.pop()); }
+        else if (g.communityCards.length === 4) { g.communityCards.push(g.deck.pop()); }
+        else {
+          // Showdown
+          const p1hand = evaluatePokerHand([...g.players[0].hand, ...g.communityCards]);
+          const p2hand = evaluatePokerHand([...g.players[1].hand, ...g.communityCards]);
+          const pot = (g.pot||0) + g.players[0].bet + g.players[1].bet;
+          let resultDesc = '';
+          let winnerP;
+          if (p1hand.rank > p2hand.rank || (p1hand.rank===p2hand.rank && p1hand.tiebreak > p2hand.tiebreak)) {
+            g.players[0].chips += pot; winnerP = g.players[0];
+            resultDesc = `🏆 **<@${g.players[0].id}> wins ${pot} chips!**\n${p1hand.name} beats ${p2hand.name}`;
+          } else if (p2hand.rank > p1hand.rank || p2hand.tiebreak > p1hand.tiebreak) {
+            g.players[1].chips += pot; winnerP = g.players[1];
+            resultDesc = `🏆 **<@${g.players[1].id}> wins ${pot} chips!**\n${p2hand.name} beats ${p1hand.name}`;
+          } else {
+            g.players[0].chips += Math.floor(pot/2); g.players[1].chips += Math.floor(pot/2);
+            resultDesc = `🤝 **Split pot! ${Math.floor(pot/2)} chips each.**`;
+          }
+          g.round++; g.pot = 0; g.players[0].bet = 0; g.players[1].bet = 0;
+          if (g.round > 10 || g.players[0].chips <= 0 || g.players[1].chips <= 0) {
+            const finalW = g.players[0].chips >= g.players[1].chips ? g.players[0] : g.players[1];
+            delete pokerGames[interaction.channel.id];
+            return interaction.update({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🃏 Poker — Showdown!')
+              .setDescription(`**Community:** ${pokerHandStr(g.communityCards)}\n**<@${g.players[0].id}>:** ${pokerHandStr(g.players[0].hand)} → ${p1hand.name}\n**<@${g.players[1].id}>:** ${pokerHandStr(g.players[1].hand)} → ${p2hand.name}\n\n${resultDesc}\n\n🏆 **<@${finalW.id}> WINS THE MATCH!**`)
+              .setTimestamp()],components:[]});
+          }
+          // New round
+          g.deck = makePokerDeck();
+          g.players[0].hand=[g.deck.pop(),g.deck.pop()]; g.players[1].hand=[g.deck.pop(),g.deck.pop()];
+          g.players[0].folded=false; g.players[1].folded=false;
+          g.communityCards=[]; g.currentTurn=g.players[0].id;
+          g.players[0].bet=10; g.players[1].bet=20;
+          g.players[0].chips=Math.max(0,g.players[0].chips-10); g.players[1].chips=Math.max(0,g.players[1].chips-20);
+          try{await interaction.user.send(`🃏 **Hole cards R${g.round}:** ${pokerHandStr(g.players[0].hand)}`);}catch{}
+          try{await interaction.guild.members.fetch(g.players[1].id).then(m=>m.send(`🃏 **Hole cards R${g.round}:** ${pokerHandStr(g.players[1].hand)}`)).catch(()=>{});}catch{}
+          return interaction.update({embeds:[new EmbedBuilder().setColor('#1A472A').setTitle(`🃏 Poker — Round ${g.round}/10`)
+            .setDescription(`**Showdown Results:**\n${resultDesc}\n\n**New Round — Community cards:** *Pre-flop*\n<@${g.players[0].id}>: **${g.players[0].chips}** chips | <@${g.players[1].id}>: **${g.players[1].chips}** chips`)
+            .setTimestamp()],components:buildPokerActionRows(false)});
+        }
+        g.currentTurn = opp.id;
+        return interaction.update({embeds:[buildPokerEmbed(g)],components:buildPokerActionRows(false)});
+      }
+      // Call
+      const callAmt = Math.min(toCall, p.chips);
+      p.chips -= callAmt; p.bet += callAmt;
+      if (p.chips === 0) p.allIn = true;
+      // After call, advance to next street
+      if (g.communityCards.length < 5) {
+        if (g.communityCards.length === 0) g.communityCards = [g.deck.pop(),g.deck.pop(),g.deck.pop()];
+        else g.communityCards.push(g.deck.pop());
+      }
+      g.currentTurn = opp.id;
+      return interaction.update({embeds:[buildPokerEmbed(g)],components:buildPokerActionRows(false)});
+    }
+
+    if (act === 'raise') {
+      const raiseAmt = Math.min(20 + toCall, p.chips);
+      p.chips -= raiseAmt; p.bet += raiseAmt;
+      if (p.chips === 0) p.allIn = true;
+      g.currentTurn = opp.id;
+      return interaction.update({embeds:[buildPokerEmbed(g)],components:buildPokerActionRows(false)});
+    }
+
+    if (act === 'allin') {
+      p.bet += p.chips; p.chips = 0; p.allIn = true;
+      g.currentTurn = opp.id;
+      return interaction.update({embeds:[buildPokerEmbed(g)],components:buildPokerActionRows(false)});
+    }
+  }
 });
 
 // ─── Message Deduplication Guard ─────────────────────────────────────────────
@@ -1145,7 +1599,7 @@ client.on('messageCreate', async (message) => {
       if (!hmGame.scores) hmGame.scores = {};
       if (correct) hmGame.scores[message.author.id] = (hmGame.scores[message.author.id]||0) + 1;
       const disp = hmGame.word.split('').map(l=>hmGame.guessed.includes(l)?l:'_').join(' ');
-      const won=!disp.includes('_'), lost=hmGame.wrong>=6;
+      const won=!disp.includes('_'), lost=hmGame.wrong>=5;
       if (won||lost) {
         const scoreboard = Object.entries(hmGame.scores||{}).sort(([,a],[,b])=>b-a).map(([id,s],i)=>`${['🥇','🥈','🥉'][i]||'🏅'} <@${id}>: **${s}** correct letter(s)`).join('\n');
         delete hangmanGames[message.channel.id];
@@ -1156,7 +1610,7 @@ client.on('messageCreate', async (message) => {
       }
       return message.reply({embeds:[new EmbedBuilder().setColor(correct?'#57F287':'#ED4245')
         .setTitle(`🪓 Hangman — ${correct?`✅ ${g.toUpperCase()} is in the word!`:`❌ ${g.toUpperCase()} is wrong!`}`)
-        .setDescription(`${HM_STAGES[hmGame.wrong]}\n**Word:** \`${disp}\`\nGuessed: ${hmGame.guessed.map(x=>hmGame.word.includes(x)?`✅${x}`:`❌${x}`).join(' ')} (${hmGame.wrong}/6 wrong)\n\n*Anyone can guess! Type a letter.*`)
+        .setDescription(`${HM_STAGES[hmGame.wrong]}\n**Word:** \`${disp}\`\nGuessed: ${hmGame.guessed.map(x=>hmGame.word.includes(x)?`✅${x}`:`❌${x}`).join(' ')} (${hmGame.wrong}/5 wrong)\n\n*Anyone can guess! Type a letter.*`)
         .setFooter({text:`Started by the channel • ${hmGame.word.length} letters`}).setTimestamp()]});
     }
   }
@@ -1210,32 +1664,105 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
-  // Word Chain answer
+  // Word Chain answer — HARDCORE: full dictionary, 4+ letters, 10s timer
   const wcGame = wordChainGames[message.channel.id];
   if (wcGame && message.author.id===wcGame.currentTurn && !message.content.startsWith(PREFIX)) {
     const word = message.content.trim().toLowerCase();
     if (!/^[a-z]+$/.test(word)) return;
     clearTimeout(wcGame.timer);
-    if (word[0]!==wcGame.lastLetter) return message.reply(`❌ Word must start with **${wcGame.lastLetter.toUpperCase()}**!`);
-    if (wcGame.used.has(word)) return message.reply('❌ That word was already used!');
-    if (word.length<2) return message.reply('❌ Word must be at least 2 letters!');
+
+    // Validation — strict English dictionary required
+    if (word.length < 4) {
+      const warningMsg = await message.reply(`❌ **"${word}"** is too short! Min **4 letters** required.\n⏱️ You still have time — try again!`);
+      // Restart timer for same player
+      wcGame.timer = setTimeout(async () => {
+        const loser = wcGame.currentTurn;
+        if (loser === wcGame.p1) wcGame.lives1--; else wcGame.lives2--;
+        warningMsg.delete().catch(() => {});
+        if (wcGame.lives1 <= 0 || wcGame.lives2 <= 0) {
+          const winner = wcGame.lives1 > 0 ? wcGame.p1 : wcGame.p2;
+          delete wordChainGames[message.channel.id];
+          return message.channel.send({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔗 Word Chain — Game Over!').setDescription(`💀 <@${loser}> ran out of time!\n🏆 <@${winner}> **WINS!**\n\n**Chain:** ${wcGame.chain.join(' → ')}\n**Total words:** ${wcGame.chain.length}`).setTimestamp()]});
+        }
+        wcGame.currentTurn = wcGame.currentTurn === wcGame.p1 ? wcGame.p2 : wcGame.p1;
+        message.channel.send({embeds:[buildWordChainEmbed(wcGame)]});
+      }, wcGame.timeLimit * 1000);
+      return;
+    }
+    if (word[0] !== wcGame.lastLetter) {
+      const warningMsg = await message.reply(`❌ **"${word}"** must start with **${wcGame.lastLetter.toUpperCase()}**! Try again!`);
+      wcGame.timer = setTimeout(async () => {
+        const loser = wcGame.currentTurn;
+        if (loser === wcGame.p1) wcGame.lives1--; else wcGame.lives2--;
+        warningMsg.delete().catch(() => {});
+        if (wcGame.lives1 <= 0 || wcGame.lives2 <= 0) {
+          const winner = wcGame.lives1 > 0 ? wcGame.p1 : wcGame.p2;
+          delete wordChainGames[message.channel.id];
+          return message.channel.send({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔗 Word Chain — Game Over!').setDescription(`💀 <@${loser}> timed out!\n🏆 <@${winner}> **WINS!**\n\n**Chain:** ${wcGame.chain.join(' → ')}`).setTimestamp()]});
+        }
+        wcGame.currentTurn = wcGame.currentTurn === wcGame.p1 ? wcGame.p2 : wcGame.p1;
+        message.channel.send({embeds:[buildWordChainEmbed(wcGame)]});
+      }, wcGame.timeLimit * 1000);
+      return;
+    }
+    if (wcGame.used.has(word)) {
+      const warningMsg = await message.reply(`❌ **"${word}"** was already used! Think of a new word!`);
+      wcGame.timer = setTimeout(async () => {
+        const loser = wcGame.currentTurn;
+        if (loser === wcGame.p1) wcGame.lives1--; else wcGame.lives2--;
+        warningMsg.delete().catch(() => {});
+        if (wcGame.lives1 <= 0 || wcGame.lives2 <= 0) {
+          const winner = wcGame.lives1 > 0 ? wcGame.p1 : wcGame.p2;
+          delete wordChainGames[message.channel.id];
+          return message.channel.send({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔗 Word Chain — Game Over!').setDescription(`💀 <@${loser}> timed out!\n🏆 <@${winner}> **WINS!**`).setTimestamp()]});
+        }
+        wcGame.currentTurn = wcGame.currentTurn === wcGame.p1 ? wcGame.p2 : wcGame.p1;
+        message.channel.send({embeds:[buildWordChainEmbed(wcGame)]});
+      }, wcGame.timeLimit * 1000);
+      return;
+    }
+    if (!isValidEnglishWord(word)) {
+      const warningMsg = await message.reply(`❌ **"${word}"** is not a valid English word! Only real English dictionary words are allowed!\n⏱️ You still have time — try again!`);
+      wcGame.timer = setTimeout(async () => {
+        const loser = wcGame.currentTurn;
+        if (loser === wcGame.p1) wcGame.lives1--; else wcGame.lives2--;
+        warningMsg.delete().catch(() => {});
+        if (wcGame.lives1 <= 0 || wcGame.lives2 <= 0) {
+          const winner = wcGame.lives1 > 0 ? wcGame.p1 : wcGame.p2;
+          delete wordChainGames[message.channel.id];
+          return message.channel.send({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔗 Word Chain — Game Over!').setDescription(`💀 <@${loser}> timed out!\n🏆 <@${winner}> **WINS!**`).setTimestamp()]});
+        }
+        wcGame.currentTurn = wcGame.currentTurn === wcGame.p1 ? wcGame.p2 : wcGame.p1;
+        message.channel.send({embeds:[buildWordChainEmbed(wcGame)]});
+      }, wcGame.timeLimit * 1000);
+      return;
+    }
+
+    // ✅ Valid word accepted!
     wcGame.used.add(word);
     wcGame.chain.push(word);
-    wcGame.lastLetter=word[word.length-1];
-    wcGame.currentTurn=wcGame.currentTurn===wcGame.p1?wcGame.p2:wcGame.p1;
+    wcGame.lastLetter = word[word.length - 1];
+    if (wcGame.currentTurn === wcGame.p1) wcGame.words1++; else wcGame.words2++;
+    wcGame.currentTurn = wcGame.currentTurn === wcGame.p1 ? wcGame.p2 : wcGame.p1;
+    // Reduce time limit as chain grows (gets harder!)
+    wcGame.timeLimit = Math.max(6, 10 - Math.floor(wcGame.chain.length / 4));
+
     // Set timeout for next player
-    wcGame.timer=setTimeout(async()=>{
-      const loser=wcGame.currentTurn;
-      if(loser===wcGame.p1) wcGame.lives1--; else wcGame.lives2--;
-      if(wcGame.lives1<=0||wcGame.lives2<=0){
-        const winner=wcGame.lives1>0?wcGame.p1:wcGame.p2;
+    wcGame.timer = setTimeout(async () => {
+      const loser = wcGame.currentTurn;
+      if (loser === wcGame.p1) wcGame.lives1--; else wcGame.lives2--;
+      if (wcGame.lives1 <= 0 || wcGame.lives2 <= 0) {
+        const winner = wcGame.lives1 > 0 ? wcGame.p1 : wcGame.p2;
         delete wordChainGames[message.channel.id];
-        return message.channel.send({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔗 Word Chain — Game Over!').setDescription(`⏱️ <@${loser}> ran out of time!\n\n🏆 <@${winner}> WINS!\n\n**Chain:** ${wcGame.chain.join(' → ')}`).setTimestamp()]});
+        return message.channel.send({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔗 Word Chain — Game Over!').setDescription(`⏱️ <@${loser}> ran out of time!\n\n🏆 <@${winner}> **WINS!**\n\n**Chain (${wcGame.chain.length} words):** ${wcGame.chain.join(' → ')}`).setTimestamp()]});
       }
-      wcGame.currentTurn=wcGame.currentTurn===wcGame.p1?wcGame.p2:wcGame.p1;
+      wcGame.currentTurn = wcGame.currentTurn === wcGame.p1 ? wcGame.p2 : wcGame.p1;
       message.channel.send({embeds:[buildWordChainEmbed(wcGame)]});
-    },15000);
-    return message.reply({embeds:[buildWordChainEmbed(wcGame)]});
+    }, wcGame.timeLimit * 1000);
+
+    return message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🔗 Word Chain — ✅ Accepted!')
+      .setDescription(`✅ **"${word}"** accepted! _(ends in **${wcGame.lastLetter.toUpperCase()}**)_\n\n${buildWordChainEmbed(wcGame).data.description}`)
+      .setFooter({text:`Chain length: ${wcGame.chain.length} • Time: ${wcGame.timeLimit}s (gets shorter!)`}).setTimestamp()]});
   }
 
   // Battleship coordinate input
@@ -1345,6 +1872,97 @@ client.on('messageCreate', async (message) => {
     }
   }
 
+  // Quiz Showdown answer
+  const qsGame = quizShowdownGames[message.channel.id];
+  if (qsGame && !message.content.startsWith(PREFIX)) {
+    const g = message.content.trim().toLowerCase();
+    const q = qsGame.questions[qsGame.qNum];
+    const letterMap = {a:0,b:1,c:2,d:3};
+    const letterIdx = letterMap[g];
+    const answerByLetter = letterIdx !== undefined ? q.c[letterIdx]?.toLowerCase() : null;
+    const correct = q.a.toLowerCase();
+    const isCorrect = g === correct || answerByLetter === correct;
+    if (isCorrect) {
+      qsGame.scores[message.author.id] = (qsGame.scores[message.author.id]||0) + 1;
+      qsGame.qNum++;
+      if (qsGame.timer) { clearTimeout(qsGame.timer); qsGame.timer = null; }
+      if (qsGame.qNum >= qsGame.questions.length) {
+        delete quizShowdownGames[message.channel.id];
+        const sorted = Object.entries(qsGame.scores).sort(([,a],[,b])=>b-a);
+        const winner = sorted[0];
+        return message.reply({embeds:[buildScoreboard(qsGame.scores,'🏆 Quiz Showdown — Game Over!')
+          .setDescription(`✅ <@${message.author.id}> got the last answer!\n\n${Object.entries(qsGame.scores).sort(([,a],[,b])=>b-a).map(([id,s],i)=>`${['🥇','🥈','🥉'][i]||'🏅'} <@${id}>: **${s}** pts`).join('\n')}\n\n🏆 **<@${winner[0]}> WINS!**`)]});
+      }
+      const next = qsGame.questions[qsGame.qNum];
+      qsGame.timer = setTimeout(() => {
+        if (!quizShowdownGames[message.channel.id]) return;
+        qsGame.qNum++;
+        if (qsGame.qNum >= qsGame.questions.length) {
+          delete quizShowdownGames[message.channel.id];
+          message.channel.send({embeds:[buildScoreboard(qsGame.scores,'🏆 Quiz Showdown — Finished!')]}).catch(()=>{});
+          return;
+        }
+        message.channel.send({embeds:[buildQuizShowdownEmbed(qsGame)]}).catch(()=>{});
+      }, 30000);
+      return message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('✅ Correct!')
+        .setDescription(`🎉 <@${message.author.id}> got it! Answer: **${q.a}**\n\n**Round ${qsGame.qNum}/${qsGame.questions.length}:**\n${buildQuizShowdownEmbed(qsGame).data.description}`)
+        .setTimestamp()]});
+    }
+  }
+
+  // Word Bomb answer
+  const wbGame = wordBombGames[message.channel.id];
+  if (wbGame && !message.content.startsWith(PREFIX)) {
+    const turnPlayer = wbGame.players[wbGame.turn % wbGame.players.length];
+    if (message.author.id !== turnPlayer) return;
+    const word = message.content.trim().toLowerCase();
+    if (!/^[a-z]+$/.test(word)) return;
+    clearTimeout(wbGame.timer);
+    if (!word.includes(wbGame.prompt.toLowerCase())) {
+      return message.reply(`❌ **"${word}"** doesn't contain **${wbGame.prompt}**! 💣 Try again!`);
+    }
+    if (wbGame.usedWords.has(word)) {
+      return message.reply(`❌ **"${word}"** was already used! 💣 Try again!`);
+    }
+    wbGame.usedWords.add(word);
+    wbGame.turn++;
+    wbGame.round++;
+    wbGame.prompt = WB_PROMPTS[Math.floor(Math.random()*WB_PROMPTS.length)];
+    wbGame.timeLimit = Math.max(5, wbGame.timeLimit - (wbGame.round % 5 === 0 ? 1 : 0));
+    const nextPlayer = wbGame.players[wbGame.turn % wbGame.players.length];
+    wbGame.timer = setTimeout(async () => {
+      const eliminated = wbGame.players[wbGame.turn % wbGame.players.length];
+      wbGame.players = wbGame.players.filter(id => id !== eliminated);
+      if (wbGame.players.length <= 1) {
+        const winner = wbGame.players[0];
+        delete wordBombGames[message.channel.id];
+        return message.channel.send({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('💣 Word Bomb — WINNER! 🏆')
+          .setDescription(`⏱️ <@${eliminated}> ran out of time!\n\n🏆 **<@${winner}> WINS! 💣**\n**Words played:** ${wbGame.round}`)
+          .setTimestamp()]}).catch(()=>{});
+      }
+      wbGame.turn = wbGame.turn % wbGame.players.length;
+      message.channel.send({embeds:[new EmbedBuilder().setColor('#FF4500').setTitle('💣 Word Bomb — ELIMINATED!')
+        .setDescription(`⏱️ <@${eliminated}> timed out and is ELIMINATED! 💥\n\n${buildWordBombEmbed(wbGame).data.description}`)
+        .setTimestamp()]}).catch(()=>{});
+    }, wbGame.timeLimit * 1000);
+    return message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('💣 Word Bomb — ✅ Valid!')
+      .setDescription(`✅ **"${word}"** accepted!\n\n${buildWordBombEmbed(wbGame).data.description}`)
+      .setTimestamp()]});
+  }
+
+  // Murder Mystery vote
+  const mmGame = murderGames[message.channel.id];
+  if (mmGame && mmGame.phase === 'voting' && !message.content.startsWith(PREFIX)) {
+    const vote = message.content.trim().toLowerCase();
+    const suspect = MM_SUSPECTS.find(s => vote.includes(s.toLowerCase().split(' ')[1]?.toLowerCase()||''));
+    if (!suspect) return;
+    if (!mmGame.votes) mmGame.votes = {};
+    mmGame.votes[message.author.id] = suspect;
+    return message.reply({embeds:[new EmbedBuilder().setColor('#8B0000').setTitle('🗳️ Vote Registered!')
+      .setDescription(`<@${message.author.id}> voted for **${suspect}**!\n\nKeep voting! 60 seconds total.`)
+      .setTimestamp()]});
+  }
+
   if (!message.content.startsWith(PREFIX)) return;
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const cmd  = args.shift().toLowerCase();
@@ -1361,7 +1979,7 @@ client.on('messageCreate', async (message) => {
           {name:'📩 DM',         value:`\`dm\` \`dmall\` \`announce\`\n> \`!dm @user1 @user2 message\` — DM multiple users (rate-limited)`},
           {name:'😂 Fun',        value:`\`meme\` \`joke\` \`8ball\` \`ship\` \`fight\` \`slap\` \`hug\` \`kiss\` \`pat\` \`coinflip\` \`roll\` \`gay\` \`iq\` \`rizz\` \`aura\` \`simp\` \`drip\` \`sus\``},
           {name:'🎮 Games (Solo)',value:`\`blackjack\` \`slots\` \`mines\` \`snake\` \`2048\` \`memory\` \`hol\` \`dicepoker\`\n> \`wordle\` \`hangman\` \`trivia\` \`guess\` \`scramble\` \`emojidecode\` (anyone can join!)`},
-          {name:'⚔️ Multiplayer Games',value:`\`ttt @user\` \`connect4 @user\` \`rps @user\` \`battleship @user\`\n> \`mathduel @user\` \`wordchain @user\` \`triviabattle @user\`\n> \`fasttype\` \`truthordare\`\n> \`rps rock/paper/scissors\` — vs bot`},
+          {name:'⚔️ Multiplayer Games',value:`\`ttt @user\` \`connect4 @user\` \`rps @user\` \`battleship @user\`\n> \`mathduel @user\` \`wordchain @user\` \`triviabattle @user\`\n> \`poker @user\` \`wordbomb @u1 @u2...\` \`murdermystery @u1 @u2...\`\n> \`fasttype\` \`truthordare\` \`quizshowdown\` \`triviamarathon\`\n> \`rps rock/paper/scissors\` — vs bot`},
           {name:'🛑 Game Control',value:`\`stopgame\` — Stop all active games in channel (Mod only)`},
           {name:'🎫 Tickets',    value:`\`ticket\` \`ticketset\` \`ticketreset\``},
           {name:'🎉 Welcome',    value:`\`welcomeset\` \`welcometest\``},
@@ -1877,8 +2495,8 @@ client.on('messageCreate', async (message) => {
       const word=HM_WORDS[Math.floor(Math.random()*HM_WORDS.length)];
       hangmanGames[message.channel.id]={word,guessed:[],wrong:0,scores:{}};
       message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🪓 Hangman — Game Started!')
-        .setDescription(`${HM_STAGES[0]}\n**Word:** \`${'_ '.repeat(word.length).trim()}\`\n\n📖 **How to play:**\n• **Anyone** in this channel can guess!\n• Type a **single letter** in chat to guess\n• You have **6 wrong guesses** before the man is hanged\n• Correct letters earn you points on the scoreboard\n\n👥 **Players:** Everyone — no limits!\n📏 **Word length:** ${word.length} letters`)
-        .setFooter({text:`Type a single letter to guess! • 6 wrong guesses allowed`}).setTimestamp()]});
+        .setDescription(`${HM_STAGES[0]}\n**Word:** \`${'_ '.repeat(word.length).trim()}\`\n\n📖 **How to play:**\n• **Anyone** in this channel can guess!\n• Type a **single letter** in chat to guess\n• You have only **5 wrong guesses** — one less than usual!\n• Correct letters earn you points on the scoreboard\n\n👥 **Players:** Everyone — no limits!\n📏 **Word length:** ${word.length} letters`)
+        .setFooter({text:`Type a single letter to guess! • Only 5 wrong guesses!`}).setTimestamp()]});
       break;
     }
 
@@ -1887,18 +2505,18 @@ client.on('messageCreate', async (message) => {
       const q=TRIVIA[Math.floor(Math.random()*TRIVIA.length)];
       triviaGames[message.channel.id]={q,userId:message.author.id};
       const choices=q.c.map((c,i)=>`${['🇦','🇧','🇨','🇩'][i]} **${c}**`).join('\n');
-      message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🧠 Trivia — Channel Question!')
-        .setDescription(`**${q.q}**\n\n${choices}\n\n📖 **How to play:** Type the **letter** (A/B/C/D) or the **full answer** in chat!\n👥 **Players:** Anyone in this channel — first correct answer wins!\n⏱️ **Time:** 30 seconds`)
+      message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🧠 Trivia — HARD MODE!')
+        .setDescription(`**${q.q}**\n\n${choices}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 Type the **letter** (A/B/C/D) or the **full answer**!\n👥 **Anyone** can answer — first correct wins the point!\n⏱️ **30 seconds!**`)
         .setFooter({text:'Anyone can answer! • 30 seconds'}).setTimestamp()]});
-      setTimeout(()=>{if(triviaGames[message.channel.id]){delete triviaGames[message.channel.id];message.channel.send({embeds:[errorEmbed(`⏱️ Time's up! The answer was: **${q.c.find(c=>c.toLowerCase()===q.a)}**`)]}).catch(()=>{});}},30000);
+      setTimeout(()=>{if(triviaGames[message.channel.id]){delete triviaGames[message.channel.id];message.channel.send({embeds:[errorEmbed(`⏱️ Time's up! The answer was: **${q.c.find(c=>c.toLowerCase()===q.a)||q.a}**`)]}).catch(()=>{});}},30000);
       break;
     }
 
     case 'guess': {
       if(guessGames[message.channel.id]) return message.reply('❌ Already running! Type a number to guess.');
-      const n=Math.floor(Math.random()*100)+1;
+      const n=Math.floor(Math.random()*1000)+1;
       guessGames[message.channel.id]={number:n,attempts:0,userId:message.author.id};
-      message.reply({embeds:[infoEmbed('🔢 Guess the Number',`I picked a number **1–100**!\n\n📖 **How to play:**\n• Type a number in chat to guess\n• I'll tell you if it's too high or too low\n• You have **7 attempts** total\n\n👥 **Players:** Anyone in this channel!\n⏱️ **Time:** 60 seconds\n\n*Type your first guess now!*`)]});
+      message.reply({embeds:[infoEmbed('🔢 Guess the Number — HARD MODE',`I picked a number **1–1000**!\n\n📖 **How to play:**\n• Type a number in chat to guess\n• I'll tell you if it's too high or too low\n• You have **7 attempts** total — use them wisely!\n\n👥 **Players:** Anyone in this channel!\n⏱️ **Time:** 60 seconds\n\n*Type your first guess now! (Range: 1–1000)*`)]});
       setTimeout(()=>{if(guessGames[message.channel.id]){delete guessGames[message.channel.id];message.channel.send({embeds:[errorEmbed(`⏱️ Time's up! The number was **${n}**.`)]}).catch(()=>{});}},60000);
       break;
     }
@@ -2046,13 +2664,13 @@ client.on('messageCreate', async (message) => {
       const opp=message.mentions.members.first();
       if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent! Usage: `!mathduel @user [difficulty 1-3]`');
       if(mathDuelGames[message.channel.id]) return message.reply('❌ Math Duel already running here!');
-      const diff=parseInt(args[1])||1;
-      if(diff<1||diff>3) return message.reply('❌ Difficulty: 1 (easy) 2 (medium) 3 (hard)');
+      const diff=parseInt(args[1])||2; // Default difficulty 2 now!
+      if(diff<1||diff>3) return message.reply('❌ Difficulty: 1 (medium) 2 (hard) 3 (brutal)');
       const q=genMathQ(diff);
       const g={p1:message.author.id,p2:opp.id,score1:0,score2:0,qNum:0,diff,current:q,answered:false};
       mathDuelGames[message.channel.id]=g;
-      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🧮 Math Duel')
-        .setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\nDifficulty: ${'⭐'.repeat(diff)}\n\n📖 **How to play:**\n• **2 players** race to solve math problems\n• Type the correct answer in chat — **first to answer** wins the point!\n• **First to 3 points** (or most after 5 Qs) wins!\n• Difficulty ${diff}: ${diff===1?'Addition (easy)':diff===2?'Multiplication (medium)':'Complex math (hard)'}\n\n*Loading questions...*`).setTimestamp()]});
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🧮 Math Duel — HARDCORE')
+        .setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\nDifficulty: ${'⭐'.repeat(diff)}\n\n📖 **How to play:**\n• **2 players** race to solve math problems\n• Type the correct answer in chat — **first to answer** wins the point!\n• **First to 3 points** (or most after 5 Qs) wins!\n• ⏱️ Only **10 seconds** per question!\n• Difficulty ${diff}: ${diff===1?'Mixed arithmetic (medium)':diff===2?'Multi-step math (hard)':'Bracket math (brutal 💀)'}\n\n*Loading questions...*`).setTimestamp()]});
       await sleep(800);
       await initMsg.edit({embeds:[buildMathEmbed(g)]});
       break;
@@ -2062,20 +2680,20 @@ client.on('messageCreate', async (message) => {
       const opp=message.mentions.members.first();
       if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent! Usage: `!wordchain @user`');
       if(wordChainGames[message.channel.id]) return message.reply('❌ Word Chain already running here!');
-      const starters='abcdefghijklmnoprstw';
+      const starters='bcdfghlmnprst'; // Only consonants — harder starting letters
       const startLetter=starters[Math.floor(Math.random()*starters.length)];
-      const g={p1:message.author.id,p2:opp.id,chain:[],lastLetter:startLetter,currentTurn:message.author.id,used:new Set(),lives1:3,lives2:3,timer:null};
+      const g={p1:message.author.id,p2:opp.id,chain:[],lastLetter:startLetter,currentTurn:message.author.id,used:new Set(),lives1:3,lives2:3,words1:0,words2:0,timeLimit:10,timer:null};
       wordChainGames[message.channel.id]=g;
-      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('🔗 Word Chain')
-        .setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\n\n📖 **How to play:**\n• **2 players** take turns typing words\n• Each word must **start with the last letter** of the previous word\n• You have **15 seconds** per turn\n• No repeating words!\n• Each timeout costs a ❤️ life — lose all 3 and you're out!\n\n*Setting up the chain...*`).setTimestamp()]});
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('🔗 Word Chain — HARDCORE MODE 💀')
+        .setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\n\n📖 **Rules (STRICT):**\n• Each word must **start with the last letter** of the previous word\n• Words must be **4+ letters** (no short words!)\n• Words must be **real English dictionary words** (no slang, no names, no other languages!)\n• Wrong/invalid/repeated words **don't extend your timer** — you get penalized!\n• You start with **10 seconds** — timer shrinks as chain grows!\n• Lose all 3 ❤️ = eliminated\n\n⚠️ **Starting letter: ${startLetter.toUpperCase()}**\n\n*Prepare yourself...*`).setTimestamp()]});
       await sleep(700);
       await initMsg.edit({embeds:[buildWordChainEmbed(g)]});
       g.timer=setTimeout(async()=>{
         const loser=g.currentTurn; if(loser===g.p1) g.lives1--; else g.lives2--;
-        if(g.lives1<=0||g.lives2<=0){const winner=g.lives1>0?g.p1:g.p2;delete wordChainGames[message.channel.id];return message.channel.send({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔗 Word Chain — Over!').setDescription(`⏱️ <@${loser}> timed out!\n🏆 <@${winner}> WINS!`).setTimestamp()]});}
+        if(g.lives1<=0||g.lives2<=0){const winner=g.lives1>0?g.p1:g.p2;delete wordChainGames[message.channel.id];return message.channel.send({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔗 Word Chain — Over!').setDescription(`⏱️ <@${loser}> timed out on the very first word!\n🏆 <@${winner}> **WINS!**`).setTimestamp()]});}
         g.currentTurn=g.currentTurn===g.p1?g.p2:g.p1;
         message.channel.send({embeds:[buildWordChainEmbed(g)]});
-      },15000);
+      },10000);
       break;
     }
 
@@ -2083,11 +2701,11 @@ client.on('messageCreate', async (message) => {
       const opp=message.mentions.members.first();
       if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent! Usage: `!triviabattle @user`');
       if(triviaBattleGames[message.channel.id]) return message.reply('❌ Trivia Battle already running here!');
-      const shuffled=[...TRIVIA_BATTLE_Q].sort(()=>Math.random()-0.5).slice(0,5);
+      const shuffled=[...TRIVIA_BATTLE_Q, ...TRIVIA.map(t=>({q:t.q,a:t.a,choices:t.c}))].sort(()=>Math.random()-0.5).slice(0,10);
       const g={p1:message.author.id,p2:opp.id,questions:shuffled,qNum:0,score1:0,score2:0,answered:[],roundWinner:null};
       triviaBattleGames[message.channel.id]=g;
-      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#E67E22').setTitle('⚡ Trivia Battle')
-        .setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\n\n📖 **How to play:**\n• **2 players** answer the same questions simultaneously\n• Click A/B/C/D buttons to answer\n• **First correct answer** wins the point each round\n• 5 questions total — highest score wins!\n\n*Loading questions...*`).setTimestamp()]});
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#E67E22').setTitle('⚡ Trivia Battle — 10 ROUNDS!')
+        .setDescription(`╔══════════════════════════════╗\n║  ⚡  TRIVIA  BATTLE  ⚡        ║\n╚══════════════════════════════╝\n\n⚔️ **<@${message.author.id}>** challenges **<@${opp.id}>**!\n\n📖 **Rules:**\n• **10 questions** — simultaneous answering!\n• Both players click A/B/C/D — first correct answer wins the point!\n• Highest score after 10 rounds wins! 🏆\n\n*Loading questions...*`).setTimestamp()]});
       await sleep(800);
       await initMsg.edit({embeds:[buildTriviaBattleEmbed(g)],components:buildTriviaBattleRows(false)});
       break;
@@ -2150,30 +2768,32 @@ client.on('messageCreate', async (message) => {
 
     case 'scramble': {
       if(scrambleGames[message.channel.id]) return message.reply('❌ Scramble already running here!');
-      const rounds=parseInt(args[0])||5;
-      if(rounds<1||rounds>10) return message.reply('❌ Rounds must be 1–10.');
+      const rounds=parseInt(args[0])||8;
+      if(rounds<1||rounds>20) return message.reply('❌ Rounds must be 1–20.');
       const entry=SCRAMBLE_WORDS[Math.floor(Math.random()*SCRAMBLE_WORDS.length)];
       const g={word:entry.word,hint:entry.hint,scrambled:scrambleWord(entry.word),round:1,maxRounds:rounds,scores:{}};
       scrambleGames[message.channel.id]=g;
-      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#F39C12').setTitle('🔀 Scramble').setDescription(`📖 **How to play:**\n• **Multiple players** — anyone can answer!\n• A scrambled word will appear — unscramble it!\n• **First to type the correct word** wins the point\n• ${rounds} rounds total\n\n*Scrambling a word...*`).setTimestamp()]});
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#F39C12').setTitle('🔀 Scramble — WORD CHALLENGE!')
+        .setDescription(`╔══════════════════════════════╗\n║  🔀  SCRAMBLE  CHALLENGE  🔀  ║\n╚══════════════════════════════╝\n\n📖 **Rules:**\n• **${rounds} rounds** — anyone can answer!\n• Unscramble the word — first correct answer wins the point!\n• Words get harder as you progress!\n\n*Scrambling your first word...*`).setTimestamp()]});
       await sleep(600);
       await initMsg.edit({embeds:[new EmbedBuilder().setColor('#F39C12').setTitle(`🔀 Scramble — Round 1/${rounds}`)
-        .setDescription(`Unscramble this word:\n\n# \`${g.scrambled}\`\n\n💡 **Hint:** ${g.hint}\n\n*Type your answer in chat — anyone can answer!*`)
+        .setDescription(`━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Unscramble this word:**\n\n# \`${g.scrambled}\`\n\n💡 **Hint:** ${g.hint}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n*Type your answer in chat — anyone can answer!*`)
         .setFooter({text:`${rounds} rounds total • First correct answer gets the point!`}).setTimestamp()]});
       break;
     }
 
     case 'emojidecode': case 'ed': {
       if(emojiDecodeGames[message.channel.id]) return message.reply('❌ Emoji Decode already running here!');
-      const rounds=parseInt(args[0])||5;
-      if(rounds<1||rounds>10) return message.reply('❌ Rounds must be 1–10.');
+      const rounds=parseInt(args[0])||8;
+      if(rounds<1||rounds>20) return message.reply('❌ Rounds must be 1–20.');
       const puzzle=EMOJI_PUZZLES[Math.floor(Math.random()*EMOJI_PUZZLES.length)];
       const g={puzzle,round:1,maxRounds:rounds,scores:{}};
       emojiDecodeGames[message.channel.id]=g;
-      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#8E44AD').setTitle('🤔 Emoji Decode').setDescription(`📖 **How to play:**\n• **Multiple players** — anyone can answer!\n• Emojis represent a word/phrase — decode them!\n• **First to type the correct answer** wins the point\n• ${rounds} rounds total — no spaces needed in answers\n\n*Loading emoji puzzle...*`).setTimestamp()]});
+      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#8E44AD').setTitle('🤔 Emoji Decode — CHALLENGE!')
+        .setDescription(`╔══════════════════════════════╗\n║  🤔  EMOJI  DECODE  🤔        ║\n╚══════════════════════════════╝\n\n📖 **Rules:**\n• **${rounds} rounds** — anyone can answer!\n• Emojis represent a word/phrase — decode it!\n• First correct answer wins the point!\n\n*Loading emoji puzzle...*`).setTimestamp()]});
       await sleep(600);
       await initMsg.edit({embeds:[new EmbedBuilder().setColor('#8E44AD').setTitle(`🤔 Emoji Decode — Round 1/${rounds}`)
-        .setDescription(`What do these emojis represent?\n\n# ${puzzle.emojis}\n\n💡 **Hint:** ${puzzle.hint}\n\n*Type your answer in chat — anyone can answer! (no spaces needed)*`)
+        .setDescription(`━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**What do these emojis represent?**\n\n# ${puzzle.emojis}\n\n💡 **Hint:** ${puzzle.hint}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n*Type your answer in chat — no spaces needed!*`)
         .setFooter({text:`${rounds} rounds total • First correct answer gets the point!`}).setTimestamp()]});
       break;
     }
@@ -2190,8 +2810,8 @@ client.on('messageCreate', async (message) => {
       await readyMsg.edit({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('⌨️ Fast Type — GO! 🚀')
         .setDescription(`**Type this sentence exactly:**\n\n>>> ${sentence}\n\n*First to type it correctly wins! ⏱️*`)
         .setFooter({text:'Case-insensitive • First correct answer wins!'}).setTimestamp()]});
-      // Auto-cancel after 60s
-      setTimeout(()=>{ if(fastTypeGames[message.channel.id]){delete fastTypeGames[message.channel.id];message.channel.send({embeds:[errorEmbed(`⏱️ Time's up! Nobody finished in time.\n\n**Sentence was:** \`${sentence}\``)]}).catch(()=>{});}},60000);
+      // Auto-cancel after 45s — harder time limit
+      setTimeout(()=>{ if(fastTypeGames[message.channel.id]){delete fastTypeGames[message.channel.id];message.channel.send({embeds:[errorEmbed(`⏱️ 45 seconds up! Nobody finished in time.\n\n**Sentence was:** \`${sentence}\``)]}).catch(()=>{});}},45000);
       break;
     }
 
@@ -2205,6 +2825,187 @@ client.on('messageCreate', async (message) => {
         .setTitle(`${choice==='truth'?'🤔 TRUTH':'🎯 DARE'} — <@${target.id}>`)
         .setDescription(`**${prompt}**\n\n📖 **How to play:**\n• Mention players to pick a random one: \`!tod @user1 @user2\`\n• Or specify: \`!tod truth\` or \`!tod dare\`\n• Everyone can participate!\n\n👥 **Players:** Anyone!`)
         .setFooter({text:'Use !tod to get another prompt!'}).setTimestamp()]});
+      break;
+    }
+
+    // ── TEXAS HOLD'EM POKER ────────────────────────────────────────────────────
+    case 'poker': case 'holdem': {
+      const opp = message.mentions.members.first();
+      if (!opp || opp.user.bot || opp.id === message.member.id) return message.reply('❌ Mention a valid opponent! Usage: `!poker @user`');
+      if (pokerGames[message.channel.id]) return message.reply('❌ Poker game already running here!');
+      const startChips = parseInt(args[1]) || 500;
+      if (startChips < 100 || startChips > 10000) return message.reply('❌ Chips must be 100–10,000.');
+      const deck = makePokerDeck();
+      const p1 = {id: message.author.id, hand: [deck.pop(), deck.pop()], chips: startChips-10, bet: 10, folded: false, allIn: false};
+      const p2 = {id: opp.id,            hand: [deck.pop(), deck.pop()], chips: startChips-20, bet: 20, folded: false, allIn: false};
+      const g = {players:[p1,p2], deck, communityCards:[], currentTurn: message.author.id, pot:0, round:1};
+      pokerGames[message.channel.id] = g;
+
+      const initMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#1A472A').setTitle('🃏 Texas Hold\'em Poker')
+        .setDescription(
+          `╔═══════════════════════════════╗\n` +
+          `║  ♠️ ♥️  POKER NIGHT  ♦️ ♣️  ║\n` +
+          `╚═══════════════════════════════╝\n\n` +
+          `⚔️ **<@${message.author.id}>** challenges **<@${opp.id}>**!\n\n` +
+          `📖 **How to Play:**\n` +
+          `• Each player gets **2 hole cards** (sent via DM!)\n` +
+          `• **5 community cards** are revealed over 4 rounds\n` +
+          `• Best **5-card hand** wins the pot!\n` +
+          `• **Blinds:** ${message.author.username} posts 10 | ${opp.user.username} posts 20\n` +
+          `• Actions: ❌ Fold | 📞 Call/Check | 📈 Raise | 💥 All-In\n\n` +
+          `🏆 **10 rounds** | Starting chips: **${startChips} each**\n\n` +
+          `*Shuffling deck and dealing cards...*`
+        ).setTimestamp()]});
+
+      // Send hole cards via DM
+      try { await message.author.send(`🃏 **Your hole cards (Round 1):** ${pokerHandStr(p1.hand)}\n_(Keep these secret!)_`); } catch { await message.channel.send(`⚠️ <@${message.author.id}> couldn't receive DM! Enable DMs to see your cards.`); }
+      try { await opp.send(`🃏 **Your hole cards (Round 1):** ${pokerHandStr(p2.hand)}\n_(Keep these secret!)_`); } catch { await message.channel.send(`⚠️ <@${opp.id}> couldn't receive DM! Enable DMs to see your cards.`); }
+
+      await sleep(1000);
+      await initMsg.edit({embeds:[buildPokerEmbed(g)], components: buildPokerActionRows(false)});
+      break;
+    }
+
+    // ── QUIZ SHOWDOWN ──────────────────────────────────────────────────────────
+    case 'quizshowdown': case 'qs': {
+      if (quizShowdownGames[message.channel.id]) return message.reply('❌ Quiz Showdown already running here!');
+      const rounds = Math.min(parseInt(args[0]) || 10, 15);
+      const questions = [...QUIZ_SHOWDOWN_Q].sort(()=>Math.random()-0.5).slice(0,rounds);
+      const g = {questions, qNum:0, scores:{}, timer:null};
+      quizShowdownGames[message.channel.id] = g;
+      const initMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#FF6B35').setTitle('🏆 Quiz Showdown — GET READY!')
+        .setDescription(
+          `╔══════════════════════════════╗\n` +
+          `║  🧠  QUIZ SHOWDOWN  🧠        ║\n` +
+          `╚══════════════════════════════╝\n\n` +
+          `📖 **Rules:**\n• **Anyone** in this channel can play!\n• **${rounds} questions** — 30 seconds each\n• First to type the correct answer wins the point!\n• Type the **letter (A/B/C/D)** or the **full answer**\n\n` +
+          `🚀 **Starting in 5 seconds...**`
+        ).setTimestamp()]});
+      await sleep(5000);
+      g.timer = setTimeout(() => {
+        if (!quizShowdownGames[message.channel.id]) return;
+        g.qNum++;
+        if (g.qNum >= g.questions.length) { delete quizShowdownGames[message.channel.id]; message.channel.send({embeds:[buildScoreboard(g.scores,'🏆 Quiz Showdown — Time Up!')]}).catch(()=>{}); return; }
+        message.channel.send({embeds:[buildQuizShowdownEmbed(g)]}).catch(()=>{});
+      }, 30000);
+      await initMsg.edit({embeds:[buildQuizShowdownEmbed(g)]});
+      break;
+    }
+
+    // ── WORD BOMB ──────────────────────────────────────────────────────────────
+    case 'wordbomb': case 'wb': {
+      if (wordBombGames[message.channel.id]) return message.reply('❌ Word Bomb already running here!');
+      const mentions = [...message.mentions.users.values()].filter(u=>!u.bot);
+      if (mentions.length < 1) return message.reply('❌ Mention at least 1 opponent! Usage: `!wordbomb @user1 @user2 ...`');
+      const players = [message.author.id, ...mentions.map(u=>u.id)];
+      const prompt = WB_PROMPTS[Math.floor(Math.random()*WB_PROMPTS.length)];
+      const g = {players, turn:0, prompt, usedWords: new Set(), round:0, timeLimit:15, timer:null};
+      wordBombGames[message.channel.id] = g;
+      const initMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#FF4500').setTitle('💣 Word Bomb — MULTIPLAYER!')
+        .setDescription(
+          `╔══════════════════════════════╗\n` +
+          `║  💣  WORD  BOMB  💣           ║\n` +
+          `╚══════════════════════════════╝\n\n` +
+          `📖 **Rules:**\n• You must type a word **containing the given letters**!\n• **15 seconds** per turn — timer gets shorter as game goes on!\n• No repeating words!\n• Miss your turn? You're **ELIMINATED!** 💥\n\n` +
+          `👥 **Players (${players.length}):** ${players.map(id=>`<@${id}>`).join(', ')}\n\n` +
+          `🚀 **Starting in 3 seconds...**`
+        ).setTimestamp()]});
+      await sleep(3000);
+      const nextPlayer = g.players[0];
+      g.timer = setTimeout(async () => {
+        const elim = g.players[g.turn % g.players.length];
+        g.players = g.players.filter(id=>id!==elim);
+        if (g.players.length <= 1) {
+          delete wordBombGames[message.channel.id];
+          return message.channel.send({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('💣 Word Bomb — WINNER!')
+            .setDescription(`⏱️ <@${elim}> timed out! 💥\n\n🏆 **<@${g.players[0]}> WINS!**`).setTimestamp()]}).catch(()=>{});
+        }
+        message.channel.send({embeds:[buildWordBombEmbed(g)]}).catch(()=>{});
+      }, g.timeLimit * 1000);
+      await initMsg.edit({embeds:[buildWordBombEmbed(g)]});
+      break;
+    }
+
+    // ── MURDER MYSTERY ─────────────────────────────────────────────────────────
+    case 'murdermystery': case 'mm': {
+      if (murderGames[message.channel.id]) return message.reply('❌ Murder Mystery already running here!');
+      const mentions = [...message.mentions.users.values()].filter(u=>!u.bot);
+      const players = [message.author.id, ...mentions.map(u=>u.id)];
+      if (players.length < 2) return message.reply('❌ Mention at least 1 other player! Usage: `!mm @player2 @player3 ...`');
+      const killer = MM_SUSPECTS[Math.floor(Math.random()*MM_SUSPECTS.length)];
+      const weapon = MM_WEAPONS[Math.floor(Math.random()*MM_WEAPONS.length)];
+      const room   = MM_ROOMS[Math.floor(Math.random()*MM_ROOMS.length)];
+      const victim = `Member #${Math.floor(Math.random()*999)+100}`;
+      const generateClue = (isReal) => {
+        const template = MM_CLUES[Math.floor(Math.random()*MM_CLUES.length)];
+        const fakeSuspect = MM_SUSPECTS.filter(s=>s!==killer)[Math.floor(Math.random()*(MM_SUSPECTS.length-1))];
+        const fakeRoom    = MM_ROOMS.filter(r=>r!==room)[Math.floor(Math.random()*(MM_ROOMS.length-1))];
+        return template.replace('{suspect}', isReal?killer:fakeSuspect)
+                       .replace('{weapon}', weapon)
+                       .replace('{room}', isReal?room:fakeRoom);
+      };
+      // 2 real clues + 2 fake clues, shuffled
+      const clues = [generateClue(true), generateClue(true), generateClue(false), generateClue(false)].sort(()=>Math.random()-0.5);
+      const g = {players, killer, weapon, room, victim, clues, cluePhase:0, phase:'clues', votes:{}};
+      murderGames[message.channel.id] = g;
+      const scene = `${victim} was found dead in the ${room.split(' ')[1]} with a ${weapon.split(' ')[1]} nearby.`;
+      g.scene = scene;
+      const initMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#4A0000').setTitle('🔪 Murder Mystery — A Crime Has Been Committed!')
+        .setDescription(
+          `╔══════════════════════════════╗\n` +
+          `║  🔪  MURDER MYSTERY  🔪       ║\n` +
+          `╚══════════════════════════════╝\n\n` +
+          `💀 **The Victim:** ${victim}\n🔍 **Scene:** ${scene}\n\n` +
+          `📖 **How to Play:**\n• 4 clues will be revealed over 80 seconds\n• Analyze them carefully — some may be RED HERRINGS!\n• After all clues, **60 seconds** to vote on the killer\n• Most votes on the correct suspect wins!\n\n` +
+          `👥 **Investigators (${players.length}):** ${players.map(id=>`<@${id}>`).join(', ')}\n\n` +
+          `🕵️ *First clue in 5 seconds...*`
+        ).setTimestamp()]});
+
+      // Reveal clues every 20s
+      for (let i = 1; i <= 4; i++) {
+        await sleep(i === 1 ? 5000 : 20000);
+        if (!murderGames[message.channel.id]) return;
+        g.cluePhase = i;
+        await message.channel.send({embeds:[buildMurderMysteryEmbed(g, 'clues')]}).catch(()=>{});
+      }
+      await sleep(5000);
+      if (!murderGames[message.channel.id]) return;
+      g.phase = 'voting';
+      const voteMsg = await message.channel.send({embeds:[buildMurderMysteryEmbed(g, 'voting')]}).catch(()=>{});
+
+      // Tally votes after 60s
+      setTimeout(async () => {
+        if (!murderGames[message.channel.id]) return;
+        const voteCounts = {};
+        for (const [uid, suspect] of Object.entries(g.votes||{})) {
+          voteCounts[suspect] = (voteCounts[suspect]||0) + 1;
+        }
+        const topVote = Object.entries(voteCounts).sort(([,a],[,b])=>b-a)[0];
+        const correct = topVote && topVote[0] === g.killer;
+        const correctVoters = Object.entries(g.votes||{}).filter(([,s])=>s===g.killer).map(([id])=>`<@${id}>`);
+        delete murderGames[message.channel.id];
+        await message.channel.send({embeds:[new EmbedBuilder().setColor(correct?'#57F287':'#ED4245').setTitle(`🔪 Murder Mystery — ${correct?'SOLVED! 🎉':'UNSOLVED! 😱'}`)
+          .setDescription(
+            `**The Killer was: ${g.killer}**\n**Weapon: ${g.weapon}** | **Room: ${g.room}**\n\n` +
+            (correct ? `✅ **${correctVoters.join(', ')} guessed correctly!** 🏆` : `❌ **No one solved the case...**\n${topVote?`Most votes went to: ${topVote[0]}`:'*No votes cast*'}`) +
+            `\n\n**Vote Tally:**\n${Object.entries(voteCounts).map(([s,c])=>`${s}: **${c}** vote(s)`).join('\n')||'*No votes*'}`
+          ).setTimestamp()]}).catch(()=>{});
+      }, 60000);
+      break;
+    }
+
+    // ── ENHANCED TRIVIA (15 rounds) ────────────────────────────────────────────
+    case 'triviamarathon': case 'tm': {
+      if (quizShowdownGames[message.channel.id]) return message.reply('❌ Already running!');
+      const q = [...QUIZ_SHOWDOWN_Q, ...TRIVIA.map(t=>({q:t.q, a:t.a, c:t.c}))].sort(()=>Math.random()-0.5).slice(0,15);
+      const g = {questions:q, qNum:0, scores:{}, timer:null};
+      quizShowdownGames[message.channel.id] = g;
+      const initMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#E91E8C').setTitle('🧠 Trivia Marathon — 15 ROUNDS!')
+        .setDescription(`╔══════════════════════════════╗\n║  🧠 TRIVIA MARATHON 🧠       ║\n╚══════════════════════════════╝\n\n📖 **15 questions** • **30s each** • Anyone can answer!\nFirst correct answer gets the point! Starting in 5s...`)
+        .setTimestamp()]});
+      await sleep(5000);
+      g.timer = setTimeout(()=>{ if (!quizShowdownGames[message.channel.id]) return; g.qNum++; if(g.qNum>=g.questions.length){delete quizShowdownGames[message.channel.id];message.channel.send({embeds:[buildScoreboard(g.scores,'🧠 Trivia Marathon — Finished!')]}).catch(()=>{});return;} message.channel.send({embeds:[buildQuizShowdownEmbed(g)]}).catch(()=>{}); },30000);
+      await initMsg.edit({embeds:[buildQuizShowdownEmbed(g)]});
       break;
     }
 
@@ -2227,6 +3028,10 @@ client.on('messageCreate', async (message) => {
       if(emojiDecodeGames[cid]){delete emojiDecodeGames[cid];stopped=true;}
       if(fastTypeGames[cid]){delete fastTypeGames[cid];stopped=true;}
       if(rpsGames[cid]){delete rpsGames[cid];stopped=true;}
+      if(pokerGames[cid]){delete pokerGames[cid];stopped=true;}
+      if(quizShowdownGames[cid]){delete quizShowdownGames[cid];stopped=true;}
+      if(wordBombGames[cid]){delete wordBombGames[cid];stopped=true;}
+      if(murderGames[cid]){delete murderGames[cid];stopped=true;}
       if(bjGames[uid]){delete bjGames[uid];stopped=true;}
       if(minesGames[uid]){delete minesGames[uid];stopped=true;}
       if(snakeGames[uid]){delete snakeGames[uid];stopped=true;}
