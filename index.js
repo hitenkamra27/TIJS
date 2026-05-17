@@ -35,6 +35,7 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.DirectMessages,
   ],
 });
 
@@ -774,18 +775,63 @@ const FASTTYPE_SENTENCES = [
 
 // ─── Truth or Dare Data ────────────────────────────────────────────────────────
 const TRUTHS = [
-  'What is your most embarrassing moment?','What is your biggest fear?',
-  'Have you ever lied to your best friend?','What is your biggest regret?',
-  'What is the most childish thing you still do?','What was your worst first impression?',
-  'Have you ever cheated in a game?','What is your weirdest habit?',
-  'What is the most embarrassing thing in your room?','What is the biggest lie you\'ve told?',
+  'What is your most embarrassing moment?',
+  'What is your biggest fear in life?',
+  'Have you ever lied to your best friend? What was it about?',
+  'What is your biggest regret so far?',
+  'What is the most childish thing you still secretly do?',
+  'What was the worst first impression you ever made on someone?',
+  'Have you ever cheated in a game or exam?',
+  'What is your weirdest habit that you rarely tell people about?',
+  'What is the most embarrassing thing currently in your room?',
+  'What is the biggest lie you have ever told?',
+  'What is something you are secretly really bad at?',
+  'What is the most embarrassing thing that happened to you in public?',
+  'Have you ever accidentally sent a message to the wrong person? What did it say?',
+  'What is the strangest dream you have ever had?',
+  'If you could erase one memory, what would it be?',
+  'Have you ever walked into a wrong room and pretended you meant to go there?',
+  'What is the pettiest reason you have ever stopped talking to someone?',
+  'What is something you pretend to like just to fit in?',
+  'Have you ever laughed at the absolute worst time? What happened?',
+  'What is a secret talent you have that nobody knows about?',
+  'What is the most ridiculous thing you have ever cried about?',
+  'What app on your phone would be most embarrassing if everyone saw?',
+  'What is the most awkward conversation you have ever had?',
+  'If your parents saw your entire search history, how bad would it be (1-10)?',
+  'What is a lie you told that the other person still believes today?',
+  'Who in this server do you find the funniest, and why?',
+  'Have you ever muted or ignored someone in this server without telling them?',
+  'Who would you trust the most here in a real-life emergency?',
+  'What is the most unhinged message you have ever sent in any Discord server?',
+  'What is a food combination you secretly enjoy that others would find disgusting?',
 ];
 const DARES = [
-  'Send a random GIF in this channel!','Type with your eyes closed for 30 seconds!',
-  'Change your nickname to "Potato" for 5 minutes!','Send a message in all caps!',
-  'Write a 2-line poem about this server!','Send your current screen time!',
-  'Send the last photo in your gallery description (no spoilers)!','Speak in rhymes for the next 3 messages!',
-  'Tell a fun fact about yourself!','Do 10 jumping jacks and report back!',
+  'Send a random GIF in this channel right now!',
+  'Type your next 3 messages with your eyes completely closed!',
+  'Change your nickname to "🥔 Potato 🥔" for the next 10 minutes!',
+  'Send your next message completely in CAPS LOCK!',
+  'Write a 2-line poem about this server and post it here!',
+  'Describe the most recent meme from your camera roll (description only, no spoilers)!',
+  'Speak only in rhymes for your next 5 messages!',
+  'Tell a fun or embarrassing fact about yourself right now!',
+  'Use only emojis to describe how your day has been!',
+  'Write a dramatic villain speech (minimum 3 lines) and post it in chat!',
+  'Say something genuinely nice about every person currently online in this server!',
+  'Describe the weirdest dream you remember in the most dramatic way possible!',
+  'In exactly 10 words, describe what you are doing right now!',
+  'In 3 sentences, write a fake news story about this server!',
+  'Come up with a creative nickname for everyone mentioned in this game!',
+  'Roast yourself in 3 sentences and post it here!',
+  'Tell a joke — if nobody reacts with 😂, tell another one!',
+  'React to the last 5 messages with random emojis — no explanations allowed!',
+  'Do 10 jumping jacks and come back to report you actually did them!',
+  'Drink a full glass of water as fast as you can and report your time!',
+  'Compliment every person in this channel with a unique one-liner!',
+  'Send a voice message (or describe out loud) doing your best impression of someone!',
+  'For the next 3 messages, add "...but that is just my opinion 🤷" to everything you say!',
+  'Write a dramatic 3-sentence movie plot where the main character is you!',
+  'Ask a genuine question to every person currently mentioned in this game!',
 ];
 const HM_WORDS = [
   // Longer, harder words
@@ -1138,6 +1184,89 @@ client.on('interactionCreate', async (interaction) => {
     game.currentPlayer = game.currentPlayer===game.player1 ? game.player2 : game.player1;
     game.symbol = game.symbol==='❌' ? '⭕' : '❌';
     return interaction.update({embeds:[buildTTTEmbed(game,`<@${game.currentPlayer}>'s turn (${game.symbol})`)],components:buildTTTRows(game.board,false)});
+  }
+
+  // Truth or Dare buttons
+  if (interaction.isButton() && interaction.customId.startsWith('tod:')) {
+    const g = truthDareGames[interaction.channel.id];
+    if (!g) return interaction.reply({ content: '❌ No Truth or Dare game running here. Use `!truthordare` to start one!', ephemeral: true });
+
+    const action = interaction.customId.split(':')[1];
+
+    // Stop game
+    if (action === 'stop') {
+      delete truthDareGames[interaction.channel.id];
+      return interaction.update({ embeds: [
+        new EmbedBuilder().setColor('#ED4245').setTitle('🎭 Truth or Dare — Game Ended!')
+          .setDescription(`<@${interaction.user.id}> ended the game. Thanks for playing!`)
+          .setTimestamp()
+      ], components: [] });
+    }
+
+    // Skip turn
+    if (action === 'skip') {
+      const skipperId = interaction.user.id;
+      // Only allow the current player to skip
+      if (skipperId !== g.currentPlayer) {
+        return interaction.reply({ content: `❌ It's not your turn! It's <@${g.currentPlayer}>'s turn right now.`, ephemeral: true });
+      }
+      g.currentIndex = (g.currentIndex + 1) % g.players.length;
+      g.currentPlayer = g.players[g.currentIndex];
+      g.round++;
+      const playerList = g.players.map((id, i) => `${i === g.currentIndex ? '▶️' : '⬜'} <@${id}>`).join('\n');
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('tod:truth').setLabel('🤔 Truth').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('tod:dare').setLabel('🎯 Dare').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('tod:skip').setLabel('⏭️ Skip Turn').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('tod:stop').setLabel('🛑 Stop Game').setStyle(ButtonStyle.Secondary),
+      );
+      return interaction.update({ embeds: [
+        new EmbedBuilder().setColor('#95A5A6').setTitle('🎭 Truth or Dare — Turn Skipped!')
+          .setDescription(
+            `<@${skipperId}> skipped their turn!\n\n` +
+            `**Players:**\n${playerList}\n\n` +
+            `<@${g.currentPlayer}>'s turn now!\n**Choose your fate 👇**`
+          )
+          .setFooter({ text: `Round ${g.round} • ${g.players.length} player(s)` })
+          .setTimestamp()
+      ], components: [row] });
+    }
+
+    // Truth or Dare — anyone can click for the current player, but should be the current player
+    const isCurrentPlayer = interaction.user.id === g.currentPlayer;
+    const choice = action; // 'truth' or 'dare'
+    const list = choice === 'truth' ? TRUTHS : DARES;
+    const prompt = list[Math.floor(Math.random() * list.length)];
+
+    // Advance to next player after showing the prompt
+    const previousPlayer = g.currentPlayer;
+    g.currentIndex = (g.currentIndex + 1) % g.players.length;
+    g.currentPlayer = g.players[g.currentIndex];
+    g.round++;
+
+    const playerList = g.players.map((id, i) => `${i === g.currentIndex ? '▶️' : '⬜'} <@${id}>`).join('\n');
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('tod:truth').setLabel('🤔 Truth').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('tod:dare').setLabel('🎯 Dare').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('tod:skip').setLabel('⏭️ Skip Turn').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('tod:stop').setLabel('🛑 Stop Game').setStyle(ButtonStyle.Secondary),
+    );
+
+    return interaction.update({ embeds: [
+      new EmbedBuilder()
+        .setColor(choice === 'truth' ? '#3498DB' : '#E74C3C')
+        .setTitle(`${choice === 'truth' ? '🤔 TRUTH' : '🎯 DARE'} — <@${previousPlayer}>`)
+        .setDescription(
+          `**${prompt}**\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `⬆️ Complete the ${choice} above, then...\n\n` +
+          `**Players:**\n${playerList}\n\n` +
+          `<@${g.currentPlayer}> it's your turn next!\n**Pick Truth or Dare 👇**`
+        )
+        .setFooter({ text: `Round ${g.round} • ${g.players.length} player(s) • Use !stopgame to end` })
+        .setTimestamp()
+    ], components: [row] });
   }
 
   // Mines
@@ -1559,10 +1688,86 @@ function isDuplicate(id) {
   return false;
 }
 
+// ─── Bot Mention / DM Handler — show invite & info ───────────────────────────
+client.on('messageCreate', async (message) => {
+  if (message.author.bot) return;
+
+  // ── Handle DMs: show invite + bot info ──────────────────────────────────────
+  if (!message.guild) {
+    const inviteURL = `https://discord.com/oauth2/authorize?client_id=${client.user.id}&permissions=8&scope=bot%20applications.commands`;
+    const up = process.uptime(), h = Math.floor(up/3600), m = Math.floor((up%3600)/60), s = Math.floor(up%60);
+    return message.reply({ embeds: [
+      new EmbedBuilder()
+        .setColor('#5865F2')
+        .setTitle(`🤖 Hey! I'm ${client.user.username}`)
+        .setThumbnail(client.user.displayAvatarURL({ forceStatic: false, size: 256 }))
+        .setDescription(
+          `Thanks for messaging me!\n\nI'm a **multipurpose Discord bot** with moderation, fun games, welcome system, tickets, and much more!\n\n` +
+          `**[🔗 Invite Me to Your Server](${inviteURL})**`
+        )
+        .addFields(
+          { name: '🏠 Servers',     value: `${client.guilds.cache.size}`,                     inline: true },
+          { name: '👥 Users',       value: `${client.users.cache.size}`,                      inline: true },
+          { name: '🏓 Ping',        value: `${client.ws.ping}ms`,                             inline: true },
+          { name: '⏱️ Uptime',      value: `${h}h ${m}m ${s}s`,                              inline: true },
+          { name: '📦 discord.js',  value: require('discord.js').version,                     inline: true },
+          { name: '🟢 Node.js',     value: process.version,                                   inline: true },
+          { name: '🛡️ Moderation',  value: 'kick, ban, mute, warn, purge & more',             inline: false },
+          { name: '🎮 Games',       value: 'TTT, Poker, Hangman, Wordle, Truth or Dare & more', inline: false },
+          { name: '🎉 Welcome',     value: 'Customizable welcome messages & embeds',           inline: false },
+          { name: '🎫 Tickets',     value: 'Full ticket system with wizard setup',             inline: false },
+          { name: '😂 Fun',         value: 'meme, joke, 8ball, ship, fight & more',           inline: false },
+          { name: '🔧 Prefix',      value: `\`${PREFIX}help\` in any server`,                 inline: false },
+        )
+        .setFooter({ text: `${client.user.username} • Use ${PREFIX}help in a server to see all commands!` })
+        .setTimestamp()
+    ] });
+  }
+});
+
 // ─── Message Handler ──────────────────────────────────────────────────────────
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
   if (isDuplicate(message.id)) return;
+
+  // ── Handle @mention of the bot (in server) — show invite + info ─────────────
+  const isMention = message.mentions.has(client.user) &&
+    (message.content.trim() === `<@${client.user.id}>` ||
+     message.content.trim() === `<@!${client.user.id}>` ||
+     message.content.trim().startsWith(`<@${client.user.id}>`) ||
+     message.content.trim().startsWith(`<@!${client.user.id}>`)) &&
+    !message.content.includes(PREFIX);
+
+  if (isMention) {
+    const inviteURL = `https://discord.com/oauth2/authorize?client_id=${client.user.id}&permissions=8&scope=bot%20applications.commands`;
+    const up = process.uptime(), h = Math.floor(up/3600), m = Math.floor((up%3600)/60), s = Math.floor(up%60);
+    return message.reply({ embeds: [
+      new EmbedBuilder()
+        .setColor('#5865F2')
+        .setTitle(`🤖 ${client.user.username} — Bot Info`)
+        .setThumbnail(client.user.displayAvatarURL({ forceStatic: false, size: 256 }))
+        .setDescription(
+          `Hey ${message.author}! 👋\n\nI'm a **multipurpose Discord bot** packed with moderation, games, welcome system, tickets, and much more!\n\n` +
+          `**[🔗 Invite Me to Another Server](${inviteURL})**`
+        )
+        .addFields(
+          { name: '🏠 Servers',      value: `${client.guilds.cache.size}`,      inline: true },
+          { name: '👥 Users',        value: `${client.users.cache.size}`,       inline: true },
+          { name: '🏓 Ping',         value: `${client.ws.ping}ms`,              inline: true },
+          { name: '⏱️ Uptime',       value: `${h}h ${m}m ${s}s`,               inline: true },
+          { name: '📦 discord.js',   value: require('discord.js').version,      inline: true },
+          { name: '🟢 Node.js',      value: process.version,                    inline: true },
+          { name: '🛡️ Moderation',   value: 'kick, ban, mute, warn, purge & more',              inline: false },
+          { name: '🎮 Games',        value: 'TTT, Poker, Hangman, Wordle, Truth or Dare & more', inline: false },
+          { name: '🎉 Welcome',      value: 'Customizable welcome messages & embeds',            inline: false },
+          { name: '🎫 Tickets',      value: 'Full ticket system with wizard setup',              inline: false },
+          { name: '😂 Fun',          value: 'meme, joke, 8ball, ship, fight & more',            inline: false },
+          { name: '🔧 Prefix',       value: `\`${PREFIX}help\` — see all commands`,             inline: false },
+        )
+        .setFooter({ text: `${client.user.username} • Type ${PREFIX}help to see all commands!` })
+        .setTimestamp()
+    ] });
+  }
 
   // Ticket wizard
   const session = setupSessions[message.author.id];
@@ -1980,7 +2185,7 @@ client.on('messageCreate', async (message) => {
           {name:'📩 DM',         value:`\`dm\` \`dmall\` \`announce\`\n> \`!dm @user1 @user2 message\` — DM multiple users (rate-limited)`},
           {name:'😂 Fun',        value:`\`meme\` \`joke\` \`8ball\` \`ship\` \`fight\` \`slap\` \`hug\` \`kiss\` \`pat\` \`coinflip\` \`roll\` \`gay\` \`iq\` \`rizz\` \`aura\` \`simp\` \`drip\` \`sus\``},
           {name:'🎮 Games (Solo)',value:`\`blackjack\` \`slots\` \`mines\` \`snake\` \`2048\` \`memory\` \`hol\` \`dicepoker\`\n> \`wordle\` \`hangman\` \`trivia\` \`guess\` \`scramble\` \`emojidecode\` (anyone can join!)`},
-          {name:'⚔️ Multiplayer Games',value:`\`ttt @user\` \`connect4 @user\` \`rps @user\` \`battleship @user\`\n> \`mathduel @user\` \`wordchain @user\` \`triviabattle @user\`\n> \`poker @user\` \`wordbomb @u1 @u2...\` \`murdermystery @u1 @u2...\`\n> \`fasttype\` \`truthordare\` \`quizshowdown\` \`triviamarathon\`\n> \`rps rock/paper/scissors\` — vs bot`},
+          {name:'⚔️ Multiplayer Games',value:`\`ttt @user\` \`connect4 @user\` \`rps @user\` \`battleship @user\`\n> \`mathduel @user\` \`wordchain @user\` \`triviabattle @user\`\n> \`poker @user\` \`wordbomb @u1 @u2...\` \`murdermystery @u1 @u2...\`\n> \`fasttype\` \`truthordare [@u1 @u2...]\` \`quizshowdown\` \`triviamarathon\`\n> \`rps rock/paper/scissors\` — vs bot`},
           {name:'🛑 Game Control',value:`\`stopgame\` — Stop all active games in channel (Mod only)`},
           {name:'🎫 Tickets',    value:`\`ticket\` \`ticketset\` \`ticketreset\``},
           {name:'🎉 Welcome',    value:`\`welcomeset\` \`welcometest\``},
@@ -2817,15 +3022,51 @@ client.on('messageCreate', async (message) => {
     }
 
     case 'truthordare': case 'tod': {
-      const mentionedUsers = [...message.mentions.users.values()].filter(u=>!u.bot);
-      const target = mentionedUsers.length ? mentionedUsers[Math.floor(Math.random()*mentionedUsers.length)] : message.author;
-      const choice = args.includes('truth') ? 'truth' : args.includes('dare') ? 'dare' : Math.random()<0.5?'truth':'dare';
-      const list = choice === 'truth' ? TRUTHS : DARES;
-      const prompt = list[Math.floor(Math.random()*list.length)];
-      message.reply({embeds:[new EmbedBuilder().setColor(choice==='truth'?'#3498DB':'#E74C3C')
-        .setTitle(`${choice==='truth'?'🤔 TRUTH':'🎯 DARE'} — <@${target.id}>`)
-        .setDescription(`**${prompt}**\n\n📖 **How to play:**\n• Mention players to pick a random one: \`!tod @user1 @user2\`\n• Or specify: \`!tod truth\` or \`!tod dare\`\n• Everyone can participate!\n\n👥 **Players:** Anyone!`)
-        .setFooter({text:'Use !tod to get another prompt!'}).setTimestamp()]});
+      if (truthDareGames[message.channel.id]) return message.reply('❌ A Truth or Dare game is already running here! Use `!stopgame` to end it first.');
+      // Collect players from mentions, or default to just the author
+      const mentionedUsers = [...message.mentions.users.values()].filter(u => !u.bot);
+      const players = mentionedUsers.length
+        ? [message.author, ...mentionedUsers]
+        : [message.author];
+      // Remove duplicates
+      const uniquePlayers = [...new Map(players.map(u => [u.id, u])).values()];
+      if (uniquePlayers.length < 1) return message.reply('❌ Could not find valid players!');
+
+      // Pick the first person to go
+      const firstPlayer = uniquePlayers[0];
+      truthDareGames[message.channel.id] = {
+        players: uniquePlayers.map(u => u.id),
+        currentIndex: 0,
+        currentPlayer: firstPlayer.id,
+        round: 1,
+      };
+
+      const playerList = uniquePlayers.map((u, i) => `${i === 0 ? '▶️' : '⬜'} <@${u.id}>`).join('\n');
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('tod:truth').setLabel('🤔 Truth').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('tod:dare').setLabel('🎯 Dare').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('tod:skip').setLabel('⏭️ Skip Turn').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('tod:stop').setLabel('🛑 Stop Game').setStyle(ButtonStyle.Secondary),
+      );
+
+      await message.reply({ embeds: [
+        new EmbedBuilder()
+          .setColor('#9B59B6')
+          .setTitle('🎭 Truth or Dare — Game Started!')
+          .setDescription(
+            `A Truth or Dare game has begun!\n\n` +
+            `**Players (${uniquePlayers.length}):**\n${playerList}\n\n` +
+            `<@${firstPlayer.id}> goes first!\n` +
+            `**Choose your fate below 👇**\n\n` +
+            `> 🤔 **Truth** — Answer an honest question\n` +
+            `> 🎯 **Dare** — Complete a challenge\n` +
+            `> ⏭️ **Skip** — Pass your turn (no shame!)\n\n` +
+            `*Only the current player should click!*`
+          )
+          .setFooter({ text: `Round 1 • ${uniquePlayers.length} player(s) • Anyone can use !stopgame to end` })
+          .setTimestamp()
+      ], components: [row] });
       break;
     }
 
