@@ -913,27 +913,40 @@ client.on('messageCreate', async (message) => {
     // ── !roll ────────────────────────────────────────────────────────────────
     case 'roll': {
       const n=parseInt(args[0])||6; if(n<2) return message.reply('❌ At least 2 sides.');
-      message.reply({embeds:[infoEmbed('🎲 Dice Roll',`Rolled a **d${n}** → **${Math.floor(Math.random()*n)+1}**`)]});
+      const result=Math.floor(Math.random()*n)+1;
+      const diceMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🎲 Dice Roll').setDescription(`Rolling a **d${n}**...\n\n*🎲 tumbling...*`).setTimestamp()]});
+      await sleep(600);
+      await diceMsg.edit({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🎲 Dice Roll').setDescription(`Rolled a **d${n}** → **${result}** ${'⬛'.repeat(Math.min(result,10))}`).setTimestamp()]});
       break;
     }
 
     // ── !coinflip ────────────────────────────────────────────────────────────
-    case 'coinflip': case 'coin':
-      message.reply({embeds:[infoEmbed('🪙 Coin Flip',`Result: **${Math.random()<0.5?'Heads':'Tails'}**`)]});
+    case 'coinflip': case 'coin': {
+      const result=Math.random()<0.5?'Heads':'Tails';
+      const frames=['🪙','🔄','🪙','🔄','🪙'];
+      const coinMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🪙 Coin Flip').setDescription('*Flipping the coin...*  🔄').setTimestamp()]});
+      await sleep(400);
+      await coinMsg.edit({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🪙 Coin Flip').setDescription('*Still spinning...* 🌀').setTimestamp()]});
+      await sleep(400);
+      await coinMsg.edit({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🪙 Coin Flip').setDescription(`Result: **${result}** ${result==='Heads'?'👑':'🦅'}`).setTimestamp()]});
       break;
+    }
 
     // ── FUN COMMANDS ─────────────────────────────────────────────────────────
 
     case 'meme': {
       const memes=[
-        {t:'When the code works first try 😱',i:'https://i.imgur.com/UOqFCIW.jpg'},
-        {t:'Me explaining to rubber duck 🦆',i:'https://i.imgur.com/ZSY7108.jpg'},
-        {t:'Debugging at 3am 😵',i:'https://i.imgur.com/nFHUKFi.jpg'},
-        {t:'When someone touches my code 😤',i:'https://i.imgur.com/Qq2K5gD.jpg'},
-        {t:"It works. Don't touch it.",i:'https://i.imgur.com/7pAbWeq.jpg'},
+        {t:'When the code works first try 😱',i:'https://media.giphy.com/media/MePaXrG6VGQKWV1qZ5/giphy.gif'},
+        {t:'Me explaining to rubber duck 🦆',i:'https://media.giphy.com/media/QMHoU66sBXqqLqYvGO/giphy.gif'},
+        {t:'Debugging at 3am 😵',i:'https://media.giphy.com/media/o0vwzuFwCGAFO/giphy.gif'},
+        {t:'When someone touches my code 😤',i:'https://media.giphy.com/media/yYSSBtDgbbRzq/giphy.gif'},
+        {t:"It works. Don't touch it 🙏",i:'https://media.giphy.com/media/jquDWJfPUMCiI/giphy.gif'},
+        {t:'Me after fixing one bug 😈',i:'https://media.giphy.com/media/zOvBKUUEERdNm/giphy.gif'},
+        {t:'Stack Overflow to the rescue 🦸',i:'https://media.giphy.com/media/3o7TKr3nzbMDpTGMze/giphy.gif'},
+        {t:'Semicolons be like 🙃',i:'https://media.giphy.com/media/ADiOs8AqeverrAuT4Q/giphy.gif'},
       ];
       const m=memes[Math.floor(Math.random()*memes.length)];
-      message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle(`😂 ${m.t}`).setImage(m.i).setTimestamp()]});
+      message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle(`😂 ${m.t}`).setImage(m.i).setFooter({text:'!meme for another one'}).setTimestamp()]});
       break;
     }
 
@@ -955,7 +968,10 @@ client.on('messageCreate', async (message) => {
     case '8ball': {
       const q=args.join(' '); if(!q) return message.reply('❌ Ask a question!');
       const ans=['🟢 Definitely!','🟢 Yes!','🟢 Without doubt.','🟢 Most likely.','🟡 Ask again later.','🟡 Cannot predict.','🔴 No.','🔴 Very doubtful.','🔴 Absolutely not.'];
-      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🎱 Magic 8-Ball').addFields({name:'❓',value:q},{name:'🎱',value:ans[Math.floor(Math.random()*ans.length)]}).setTimestamp()]});
+      const chosen=ans[Math.floor(Math.random()*ans.length)];
+      const ballMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🎱 Magic 8-Ball').addFields({name:'❓',value:q},{name:'🎱',value:'*The ball is swirling... 🌀*'}).setTimestamp()]});
+      await sleep(800);
+      await ballMsg.edit({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🎱 Magic 8-Ball').addFields({name:'❓',value:q},{name:'🎱',value:chosen}).setTimestamp()]});
       break;
     }
 
@@ -967,6 +983,8 @@ client.on('messageCreate', async (message) => {
       const emoji=love>=80?'💕':love>=50?'💛':love>=30?'🤝':'💔';
       message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle(`${emoji} Ship`)
         .setDescription(`**${u1.username}** 💘 **${u2.username}**\n\n\`${bar}\` **${love}%**\n\n${love>=80?'Perfect match! 💑':love>=50?'There\'s potential! 😊':love>=30?'Just friends 🤝':'Not meant to be 💔'}`)
+        .setThumbnail(u1.displayAvatarURL({forceStatic:false}))
+        .setImage(u2.displayAvatarURL({forceStatic:false,size:128}))
         .setTimestamp()]});
       break;
     }
@@ -974,25 +992,47 @@ client.on('messageCreate', async (message) => {
     case 'fight': {
       const t=message.mentions.members.first(); if(!t) return message.reply('❌ Mention someone!');
       const win=Math.random()<0.5?message.member:t, lose=win.id===message.member.id?t:message.member;
-      const moves=['a devastating punch','a spinning kick','a power slam','a critical hit'];
+      const moves=['a devastating punch','a spinning kick','a power slam','a critical hit','an atomic elbow drop','a suplex'];
+      const fightGifs=['https://media.giphy.com/media/3ohs7HdhQA4ffttVAA/giphy.gif','https://media.giphy.com/media/l4FGAkezBGPBRmNcA/giphy.gif','https://media.giphy.com/media/xT9IgH88DyVxMXLIpq/giphy.gif'];
       message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('⚔️ Fight!')
-        .setDescription(`**${message.author.username}** vs **${t.user.username}**\n\n🥊 **${win.user.username}** lands ${moves[Math.floor(Math.random()*moves.length)]}!\n\n🏆 **${win.user.username}** wins! **${lose.user.username}** is knocked out!`)
+        .setDescription(`**${message.author.username}** vs **${t.user.username}**\n\n🥊 **${win.user.username}** lands ${moves[Math.floor(Math.random()*moves.length)]}!\n\n🏆 **${win.user.username}** wins! **${lose.user.username}** is knocked out! 💀`)
+        .setImage(fightGifs[Math.floor(Math.random()*fightGifs.length)])
         .setTimestamp()]});
       break;
     }
 
-    case 'slap': { const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!'); message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('👋 Slap!').setDescription(`**${message.author.username}** slaps **${t.username}** with a giant trout! 🐟`).setTimestamp()]}); break; }
-    case 'hug':  { const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!'); message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('🤗 Hug!').setDescription(`**${message.author.username}** gives **${t.username}** a warm hug! 💕`).setTimestamp()]}); break; }
-    case 'kiss': { const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!'); message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('😘 Kiss!').setDescription(`**${message.author.username}** gives **${t.username}** a kiss! 💋`).setTimestamp()]}); break; }
-    case 'pat':  { const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!'); message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🫳 Pat!').setDescription(`**${message.author.username}** pats **${t.username}** on the head! ✨`).setTimestamp()]}); break; }
+    case 'slap': {
+      const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!');
+      const slapGifs=['https://media.giphy.com/media/Gf3AUz3eBNbTW/giphy.gif','https://media.giphy.com/media/Zql4a8VQPKgmf7ZVNI/giphy.gif','https://media.giphy.com/media/uqSU9IEYEKAbS/giphy.gif'];
+      message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('👋 Slap!').setDescription(`**${message.author.username}** slaps **${t.username}** with a giant trout! 🐟`).setImage(slapGifs[Math.floor(Math.random()*slapGifs.length)]).setTimestamp()]});
+      break;
+    }
+    case 'hug': {
+      const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!');
+      const hugGifs=['https://media.giphy.com/media/od5H3PmEG5EVq/giphy.gif','https://media.giphy.com/media/ZQN9jsRHBdOOmF3CXx/giphy.gif','https://media.giphy.com/media/143v0Z4767T15e/giphy.gif'];
+      message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('🤗 Hug!').setDescription(`**${message.author.username}** gives **${t.username}** a warm hug! 💕`).setImage(hugGifs[Math.floor(Math.random()*hugGifs.length)]).setTimestamp()]});
+      break;
+    }
+    case 'kiss': {
+      const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!');
+      const kissGifs=['https://media.giphy.com/media/G3va31oEEnIkM/giphy.gif','https://media.giphy.com/media/bGm9FnBm1fFkk/giphy.gif','https://media.giphy.com/media/mXnO9IiAqiBVK/giphy.gif'];
+      message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('😘 Kiss!').setDescription(`**${message.author.username}** gives **${t.username}** a kiss! 💋`).setImage(kissGifs[Math.floor(Math.random()*kissGifs.length)]).setTimestamp()]});
+      break;
+    }
+    case 'pat': {
+      const t=message.mentions.users.first(); if(!t) return message.reply('❌ Mention someone!');
+      const patGifs=['https://media.giphy.com/media/N0CIxcyPLROBa/giphy.gif','https://media.giphy.com/media/4HP0ddZnNAGqQ/giphy.gif','https://media.giphy.com/media/5tmRHwTlHAA9WkVxTU/giphy.gif'];
+      message.reply({embeds:[new EmbedBuilder().setColor('#57F287').setTitle('🫳 Pat!').setDescription(`**${message.author.username}** pats **${t.username}** on the head! ✨`).setImage(patGifs[Math.floor(Math.random()*patGifs.length)]).setTimestamp()]});
+      break;
+    }
 
-    case 'gay': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'gay'); message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('🏳️‍🌈 Gay Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>80?'✨ Very gay!':v>50?'🌈 Pretty gay!':v>30?'🤔 A little...':'😐 Not really.'}`).setTimestamp()]}); break; }
-    case 'iq':   { const t=message.mentions.members.first()||message.member,v=pct(t.id,'iq')+50; message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🧠 IQ Test').setDescription(`**${t.user.username}**'s IQ: **${v}**\n\n${v>=130?'🎓 Galaxy brain!':v>=110?'😎 Above avg!':v>=90?'😐 Average.':'🥴 Uhh...'}`).setTimestamp()]}); break; }
-    case 'rizz': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'rizz'); message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('😎 Rizz Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'🔥 God-tier rizz!':v>=60?'😏 Solid rizz!':v>=40?'😊 Decent.':'💀 No rizz.'}`).setTimestamp()]}); break; }
-    case 'aura': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'aura')*1000; message.reply({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('✨ Aura Points').setDescription(`**${t.user.username}**: **${v.toLocaleString()} pts**\n\n${v>=80000?'🌟 Legendary!':v>=60000?'💜 Strong!':v>=40000?'🔵 Average.':'⚫ Weak.'}`).setTimestamp()]}); break; }
-    case 'simp': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'simp'); message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('🥺 Simp Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'😭 Certified Simp!':v>=50?'😅 A bit simpy...':v>=30?'🤨 Borderline.':'😎 Not a simp.'}`).setTimestamp()]}); break; }
-    case 'drip': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'drip'); message.reply({embeds:[new EmbedBuilder().setColor('#00BFFF').setTitle('💧 Drip Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'🔥 Absolute drip!':v>=60?'😎 Nice drip!':v>=40?'👕 Basic.':'💀 No drip.'}`).setTimestamp()]}); break; }
-    case 'sus':  { const t=message.mentions.members.first()||message.member,v=pct(t.id,'sus'); message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔴 Sus Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'📮 EJECTED!':v>=60?'🤨 Pretty sus...':v>=40?'🧐 Hmm...':'✅ Not sus.'}`).setTimestamp()]}); break; }
+    case 'gay': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'gay'); message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('🏳️‍🌈 Gay Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>80?'✨ Very gay!':v>50?'🌈 Pretty gay!':v>30?'🤔 A little...':'😐 Not really.'}`) .setThumbnail(t.user.displayAvatarURL({forceStatic:false})).setTimestamp()]}); break; }
+    case 'iq':   { const t=message.mentions.members.first()||message.member,v=pct(t.id,'iq')+50; message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('🧠 IQ Test').setDescription(`**${t.user.username}**'s IQ: **${v}**\n\n${v>=130?'🎓 Galaxy brain!':v>=110?'😎 Above avg!':v>=90?'😐 Average.':'🥴 Uhh...'}`) .setThumbnail(t.user.displayAvatarURL({forceStatic:false})).setTimestamp()]}); break; }
+    case 'rizz': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'rizz'); message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('😎 Rizz Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'🔥 God-tier rizz!':v>=60?'😏 Solid rizz!':v>=40?'😊 Decent.':'💀 No rizz.'}`) .setThumbnail(t.user.displayAvatarURL({forceStatic:false})).setTimestamp()]}); break; }
+    case 'aura': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'aura')*1000; message.reply({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('✨ Aura Points').setDescription(`**${t.user.username}**: **${v.toLocaleString()} pts**\n\n${v>=80000?'🌟 Legendary!':v>=60000?'💜 Strong!':v>=40000?'🔵 Average.':'⚫ Weak.'}`) .setThumbnail(t.user.displayAvatarURL({forceStatic:false})).setTimestamp()]}); break; }
+    case 'simp': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'simp'); message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('🥺 Simp Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'😭 Certified Simp!':v>=50?'😅 A bit simpy...':v>=30?'🤨 Borderline.':'😎 Not a simp.'}`) .setThumbnail(t.user.displayAvatarURL({forceStatic:false})).setTimestamp()]}); break; }
+    case 'drip': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'drip'); message.reply({embeds:[new EmbedBuilder().setColor('#00BFFF').setTitle('💧 Drip Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'🔥 Absolute drip!':v>=60?'😎 Nice drip!':v>=40?'👕 Basic.':'💀 No drip.'}`) .setThumbnail(t.user.displayAvatarURL({forceStatic:false})).setTimestamp()]}); break; }
+    case 'sus':  { const t=message.mentions.members.first()||message.member,v=pct(t.id,'sus'); message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔴 Sus Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'📮 EJECTED!':v>=60?'🤨 Pretty sus...':v>=40?'🧐 Hmm...':'✅ Not sus.'}`) .setThumbnail(t.user.displayAvatarURL({forceStatic:false})).setTimestamp()]}); break; }
 
     // ── GAME COMMANDS ────────────────────────────────────────────────────────
 
@@ -1002,7 +1042,9 @@ client.on('messageCreate', async (message) => {
       if(tttGames[message.channel.id]) return message.reply('❌ Game already running here.');
       const g={board:Array(9).fill(null),player1:message.author.id,player2:opp.id,currentPlayer:message.author.id,symbol:'❌'};
       tttGames[message.channel.id]=g;
-      message.reply({embeds:[buildTTTEmbed(g,`<@${message.author.id}>'s turn (❌)`)],components:buildTTTRows(g.board,false)});
+      const tttMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('❌ Tic Tac Toe ⭕').setDescription(`⚔️ **${message.author.username}** challenges **${opp.user.username}**!\n\n*Setting up the board...*`).setTimestamp()]});
+      await sleep(700);
+      await tttMsg.edit({embeds:[buildTTTEmbed(g,`<@${message.author.id}>'s turn (❌)`)],components:buildTTTRows(g.board,false)});
       break;
     }
 
@@ -1041,7 +1083,14 @@ client.on('messageCreate', async (message) => {
       const bc=Object.keys(map)[Math.floor(Math.random()*3)];
       const wins={rock:'scissors',paper:'rock',scissors:'paper'};
       const res=uc===bc?'🤝 Tie!':wins[uc]===bc?'🎉 You win!':'🤖 I win!';
-      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('✊ RPS').setDescription(`You: **${map[uc]} ${uc}**\nMe: **${map[bc]} ${bc}**\n\n${res}`).setTimestamp()]});
+      const color=uc===bc?'#FEE75C':wins[uc]===bc?'#57F287':'#ED4245';
+      const countdown = await message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('✊ Rock Paper Scissors').setDescription(`You threw **${map[uc]} ${uc}**\n\n**3...**`).setTimestamp()]});
+      await sleep(600);
+      await countdown.edit({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('✊ Rock Paper Scissors').setDescription(`You threw **${map[uc]} ${uc}**\n\n**3... 2...**`).setTimestamp()]});
+      await sleep(600);
+      await countdown.edit({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('✊ Rock Paper Scissors').setDescription(`You threw **${map[uc]} ${uc}**\n\n**3... 2... 1...**`).setTimestamp()]});
+      await sleep(600);
+      await countdown.edit({embeds:[new EmbedBuilder().setColor(color).setTitle('✊ Rock Paper Scissors — Result!').setDescription(`You: **${map[uc]} ${uc}**\nMe: **${map[bc]} ${bc}**\n\n${res}`).setTimestamp()]});
       break;
     }
 
@@ -1051,8 +1100,18 @@ client.on('messageCreate', async (message) => {
       const deck=makeDeck();
       const ph=[drawCard(deck),drawCard(deck)], dh=[drawCard(deck),drawCard(deck)];
       bjGames[message.author.id]={deck,playerHand:ph,dealerHand:dh,bet};
-      if(handValue(ph)===21){delete bjGames[message.author.id];return message.reply({embeds:[successEmbed('🃏 Blackjack! 🎉',`Natural Blackjack! Win **${Math.floor(bet*2.5)} coins**!\nHand: ${fmtHand(ph)}`)]});}
-      message.reply({embeds:[buildBJEmbed(bjGames[message.author.id])],components:buildBJRows()});
+      // Dealing animation
+      const dealMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🃏 Blackjack — Dealing...')
+        .setDescription(`*Shuffling deck...*\n\nBet: **${bet} coins**`).setTimestamp()]});
+      await sleep(500);
+      await dealMsg.edit({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🃏 Blackjack — Dealing...')
+        .setDescription(`**Your hand:** ${fmtHand([ph[0]])} 🂠\n**Dealer shows:** 🂠 🂠\n\nBet: **${bet} coins**`).setTimestamp()]});
+      await sleep(500);
+      await dealMsg.edit({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🃏 Blackjack — Dealing...')
+        .setDescription(`**Your hand:** ${fmtHand([ph[0]])} 🂠\n**Dealer shows:** ${fmtHand([dh[0]])} 🂠\n\nBet: **${bet} coins**`).setTimestamp()]});
+      await sleep(500);
+      if(handValue(ph)===21){delete bjGames[message.author.id];return dealMsg.edit({embeds:[successEmbed('🃏 Blackjack! 🎉',`Natural Blackjack! Win **${Math.floor(bet*2.5)} coins**!\nHand: ${fmtHand(ph)}`)]});}
+      await dealMsg.edit({embeds:[buildBJEmbed(bjGames[message.author.id])],components:buildBJRows()});
       break;
     }
 
@@ -1063,9 +1122,21 @@ client.on('messageCreate', async (message) => {
       const syms=['🍒','🍋','🍊','🍇','⭐','💎','7️⃣'], spin=()=>syms[Math.floor(Math.random()*syms.length)];
       const [s1,s2,s3]=[spin(),spin(),spin()];
       const won=s1===s2&&s2===s3, jp=won&&s1==='💎';
-      message.reply({embeds:[new EmbedBuilder().setColor(jp?'#FFD700':won?'#57F287':'#ED4245')
+      // Spinning animation
+      const spinFrames=['🔄','⏳','🔄'];
+      const spinRow=(a,b,c)=>`╔══════════╗\n║  ${a} │ ${b} │ ${c}  ║\n╚══════════╝`;
+      const initMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🎰 Slots — Spinning...')
+        .setDescription(`${spinRow('🔄','🔄','🔄')}\n\n*The reels are spinning...*`).setTimestamp()]});
+      await sleep(700);
+      await initMsg.edit({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🎰 Slots — Spinning...')
+        .setDescription(`${spinRow(s1,'🔄','🔄')}\n\n*Reel 1 locked!*`).setTimestamp()]});
+      await sleep(700);
+      await initMsg.edit({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🎰 Slots — Spinning...')
+        .setDescription(`${spinRow(s1,s2,'🔄')}\n\n*Reel 2 locked!*`).setTimestamp()]});
+      await sleep(700);
+      await initMsg.edit({embeds:[new EmbedBuilder().setColor(jp?'#FFD700':won?'#57F287':'#ED4245')
         .setTitle(`🎰 Slots${jp?' — JACKPOT! 🎊':won?' — Winner! 🎉':''}`)
-        .setDescription(`╔══════════╗\n║  ${s1} │ ${s2} │ ${s3}  ║\n╚══════════╝\n\n${jp?'💎 **JACKPOT! 1000 coins!**':won?'🎉 **You win 100 coins!**':'😞 No luck. Try again!'}`)
+        .setDescription(`${spinRow(s1,s2,s3)}\n\n${jp?'💎 **JACKPOT! 1000 coins!**':won?'🎉 **You win 100 coins!**':'😞 No luck. Try again!'}`)
         .setTimestamp()]});
       break;
     }
@@ -1088,7 +1159,9 @@ client.on('messageCreate', async (message) => {
       if(c4Games[message.channel.id]) return message.reply('❌ Game already running here!');
       const g={board:makeC4Board(),player1:message.author.id,player2:opp.id,currentPlayer:message.author.id,symbol:'🔴'};
       c4Games[message.channel.id]=g;
-      message.reply({embeds:[buildC4Embed(g,`<@${message.author.id}>'s turn (🔴)`)],components:buildC4Rows(false)});
+      const c4Msg = await message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🔴 Connect 4 🟡').setDescription(`⚔️ **${message.author.username}** 🔴 challenges **${opp.user.username}** 🟡!\n\n*Dropping pieces into position...*`).setTimestamp()]});
+      await sleep(700);
+      await c4Msg.edit({embeds:[buildC4Embed(g,`<@${message.author.id}>'s turn (🔴)`)],components:buildC4Rows(false)});
       break;
     }
 
