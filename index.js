@@ -587,32 +587,35 @@ function buildTriviaBattleRows(disabled) {
 }
 
 // ─── Battleship Helpers ───────────────────────────────────────────────────────
-const BS_SIZE = 15;
-const BS_COLS = 'ABCDEFGHIJKLMNO'; // 15 columns
+const BS_COLS_COUNT = 6;  // 6 columns: A–F
+const BS_ROWS_COUNT = 10; // 10 rows: 1–10
+const BS_COLS = 'ABCDEF'; // 6 columns
 const BS_SHIPS = [
-  {name:'Carrier',len:5},
   {name:'Battleship',len:4},
   {name:'Cruiser',len:3},
-  {name:'Submarine',len:3},
   {name:'Destroyer',len:2},
   {name:'Patrol Boat',len:2},
   {name:'Scout',len:1},
-  {name:'Scout 2',len:1},
-]; // total 21 cells on 15x15
-function makeBSBoard() { return Array.from({length:BS_SIZE},()=>Array(BS_SIZE).fill(0)); }
+]; // total 12 cells on 10x6
+function makeBSBoard() { return Array.from({length:BS_ROWS_COUNT},()=>Array(BS_COLS_COUNT).fill(0)); }
 function placeBSShips(board) {
   const ships=[];
   for(const ship of BS_SHIPS){
-    let placed=false;
+    let placed=false, attempts=0;
     while(!placed){
+      attempts++;
+      if(attempts>500) break; // safety guard
       const horiz=Math.random()<0.5;
-      const r=Math.floor(Math.random()*(BS_SIZE-(horiz?0:ship.len)));
-      const c=Math.floor(Math.random()*(BS_SIZE-(horiz?ship.len:0)));
+      const maxR=BS_ROWS_COUNT-(horiz?0:ship.len);
+      const maxC=BS_COLS_COUNT-(horiz?ship.len:0);
+      if(maxR<=0||maxC<=0) continue;
+      const r=Math.floor(Math.random()*maxR);
+      const c=Math.floor(Math.random()*maxC);
       const cells=[];
       let ok=true;
       for(let i=0;i<ship.len;i++){
         const sr=r+(horiz?0:i), sc=c+(horiz?i:0);
-        if(board[sr][sc]!==0){ok=false;break;}
+        if(sr>=BS_ROWS_COUNT||sc>=BS_COLS_COUNT||board[sr][sc]!==0){ok=false;break;}
         cells.push([sr,sc]);
       }
       if(ok){cells.forEach(([sr,sc])=>{board[sr][sc]=1;});ships.push({name:ship.name,cells,hits:0,len:ship.len});placed=true;}
@@ -621,31 +624,27 @@ function placeBSShips(board) {
   return ships;
 }
 function renderBSGrid(board, shots, showShips=false) {
-  // Split into two halves for Discord's message length limits
-  const half = Math.ceil(BS_SIZE / 2);
-  function renderHalf(startCol, endCol) {
-    const header = '`  ' + BS_COLS.slice(startCol, endCol).split('').join(' ') + '`';
-    let out = header + '\n';
-    for(let r=0;r<BS_SIZE;r++){
-      let row=`\`${String(r+1).padStart(2)} `;
-      for(let c=startCol;c<endCol;c++){
-        const hit=shots.some(s=>s[0]===r&&s[1]===c);
-        if(hit){ row+=board[r][c]===1?'💥':'〰'; }
-        else if(showShips&&board[r][c]===1){ row+='🚢'; }
-        else { row+='🟦'; }
-      }
-      out+=row+'`\n';
+  // Single compact grid — 10 cols fits in one Discord code block
+  const header = '`   ' + BS_COLS.split('').join(' ') + '`';
+  let out = header + '\n';
+  for(let r=0;r<BS_ROWS_COUNT;r++){
+    let row='`' + String(r+1) + '  ';
+    for(let c=0;c<BS_COLS_COUNT;c++){
+      const hit=shots.some(s=>s[0]===r&&s[1]===c);
+      if(hit){ row+=board[r][c]===1?'💥':'〰'; }
+      else if(showShips&&board[r][c]===1){ row+='🚢'; }
+      else { row+='🟦'; }
     }
-    return out;
+    out+=row+'`\n';
   }
-  return renderHalf(0, half) + '\n' + renderHalf(half, BS_SIZE);
+  return out;
 }
 function parseBSCoord(str) {
-  const m=str.trim().toUpperCase().match(/^([A-O])(\d{1,2})$/);
+  const m=str.trim().toUpperCase().match(/^([A-F])(\d{1,2})$/);
   if(!m) return null;
   const row=parseInt(m[2])-1;
   const col=BS_COLS.indexOf(m[1]);
-  if(row<0||row>=BS_SIZE||col<0) return null;
+  if(row<0||row>=BS_ROWS_COUNT||col<0) return null;
   return [row, col];
 }
 function buildBSEmbed(g, whose='your') {
@@ -655,7 +654,7 @@ function buildBSEmbed(g, whose='your') {
   const ships=whose==='your'?g.ships2:g.ships1;
   const sunk=ships.filter(s=>s.hits>=s.len).length;
   return new EmbedBuilder().setColor('#3498DB').setTitle(`🚢 Battleship — <@${g.currentTurn}>'s Turn`)
-    .setDescription(`**Your Attack Grid** (targeting <@${opp}>)\n${renderBSGrid(board,shots)}\n💥 Hits shown | 〰 Miss | 🟦 Unknown\n\n**Ships sunk:** ${sunk}/${ships.length} | Type a coordinate like \`A1\`, \`H8\`, \`O15\``)
+    .setDescription(`**Your Attack Grid** (targeting <@${opp}>)\n${renderBSGrid(board,shots)}\n💥 Hit | 〰 Miss | 🟦 Unknown\n\n**Ships sunk:** ${sunk}/${ships.length} | Type a coordinate like \`A1\`, \`J6\``)
     .setTimestamp();
 }
 
@@ -1193,7 +1192,7 @@ function buildPokerEmbed(g) {
       `👤 <@${p2.id}>  \`${p2.chips} chips\`  bet: ${p2.bet}  ${p2.folded?'❌ Folded':p2.allIn?'💥 All-In':''}\n\n` +
       `**Current Turn:** <@${g.currentTurn}>`
     )
-    .setFooter({text:`Round ${g.round}/10 — Texas Hold'em • Blinds: 10/20`})
+    .setFooter({text:`Round ${g.round}/10 — Texas Holdem • Blinds: 10/20`})
     .setTimestamp();
 }
 
@@ -1493,6 +1492,148 @@ function buildScoreboard(scores, title='🏆 Final Scoreboard') {
 
 // ─── Interaction Handler ──────────────────────────────────────────────────────
 client.on('interactionCreate', async (interaction) => {
+
+  // ── Start Game Buttons (from !help menu) ──────────────────────────────────
+  if (interaction.isButton() && interaction.customId.startsWith('startgame:')) {
+    const gameId = interaction.customId.split(':')[1];
+    const channel = interaction.channel;
+    const user = interaction.user;
+    const member = interaction.member;
+
+    // Game descriptions shown in the button-triggered embed
+    const GAME_INFO = {
+      blackjack:   { emoji: '🃏', name: 'Blackjack',         desc: 'Beat the dealer to 21 without going over. Type `!blackjack <bet>` or press the button below to start with 10 coins!' },
+      slots:       { emoji: '🎰', name: 'Slots',             desc: 'Spin the slot machine! Type `!slots <bet>` to try your luck.' },
+      mines:       { emoji: '💣', name: 'Mines',             desc: 'Reveal diamonds, dodge the bombs! Type `!mines <bet> [mines]` to start.' },
+      snake:       { emoji: '🐍', name: 'Snake',             desc: 'Use the arrow buttons to guide your snake and eat apples! Type `!snake` to start.' },
+      '2048':      { emoji: '🎯', name: '2048',              desc: 'Swipe tiles to merge them and reach 2048! Type `!2048` to start.' },
+      memory:      { emoji: '🟦', name: 'Memory Match',      desc: 'Flip cards and match all pairs! Type `!memory` to start.' },
+      hol:         { emoji: '📊', name: 'Higher or Lower',   desc: 'Guess if the next number is higher or lower! Type `!hol` to start.' },
+      dicepoker:   { emoji: '🎲', name: 'Dice Poker',        desc: 'Roll dice and build the best poker hand! Type `!dicepoker <bet>` to start.' },
+      wordle:      { emoji: '🟩', name: 'Wordle',            desc: 'Guess the hidden 5-letter word in 6 tries! Type `!wordle` to start.' },
+      hangman:     { emoji: '🪓', name: 'Hangman',           desc: 'Guess letters to reveal the secret word! Type `!hangman` to start.' },
+      trivia:      { emoji: '🧠', name: 'Trivia',            desc: 'Answer hard trivia questions — anyone can participate! Type `!trivia` to start.' },
+      guess:       { emoji: '🔢', name: 'Number Guess',      desc: 'Guess the secret number! Type `!guess` to start.' },
+      scramble:    { emoji: '🔀', name: 'Scramble',          desc: 'Unscramble the word as fast as you can! Type `!scramble` to start.' },
+      emojidecode: { emoji: '🔮', name: 'Emoji Decode',      desc: 'Decode the emoji puzzle! Type `!emojidecode` to start.' },
+      ttt:         { emoji: '❌', name: 'Tic Tac Toe',       desc: 'Classic 3×3 game vs another player! Type `!ttt @user` to challenge someone.' },
+      connect4:    { emoji: '🔴', name: 'Connect 4',         desc: 'Drop pieces to connect 4 in a row! Type `!connect4 @user` to challenge.' },
+      rps:         { emoji: '🪨', name: 'Rock Paper Scissors',desc: 'Play RPS vs a friend or vs the bot! Type `!rps @user` or `!rps rock/paper/scissors`.' },
+      battleship:  { emoji: '🚢', name: 'Battleship',        desc: 'Sink your opponent fleet on a 6×10 grid! Type `!battleship @user` to start.' },
+      mathduel:    { emoji: '🧮', name: 'Math Duel',         desc: 'Race to solve math equations vs a friend! Type `!mathduel @user` to start.' },
+      wordchain:   { emoji: '🔗', name: 'Word Chain',        desc: 'Chain words — each must start with the last letter! Type `!wordchain @user` to start.' },
+      triviabattle:{ emoji: '⚡', name: 'Trivia Battle',     desc: 'Competitive trivia vs a friend — fastest correct answer wins! Type `!triviabattle @user`.' },
+      fasttype:    { emoji: '⌨️', name: 'Fast Type',         desc: 'Type the phrase faster than everyone! Type `!fasttype` to start.' },
+      quizshowdown:{ emoji: '🏆', name: 'Quiz Showdown',     desc: 'Multi-player quiz competition! Type `!quizshowdown` to start.' },
+      wordbomb:    { emoji: '💥', name: 'Word Bomb',         desc: 'Type a word containing the letters before time runs out! Type `!wordbomb @u1 @u2…`.' },
+      murdermystery:{emoji: '🔍', name: 'Murder Mystery',    desc: 'One murderer among players — deduce who did it! Type `!murdermystery @u1 @u2…`.' },
+      teamtrivia:  { emoji: '👥', name: 'Team Trivia',       desc: 'Teams compete to answer trivia! Type `!teamtrivia [teams] [rounds]` to start.' },
+      truthordare: { emoji: '🎭', name: 'Truth or Dare',     desc: 'Classic truth-or-dare with button choices! Type `!truthordare` to start.' },
+      poker:       { emoji: '♠️', name: 'Poker',             desc: 'Texas Holdem vs another player! Type `!poker @user` to challenge.' },
+      stopgame:    { emoji: '🛑', name: 'Stop All Games',    desc: 'Ends all active games in this channel. Requires **Manage Messages** permission.' },
+    };
+
+    const info = GAME_INFO[gameId];
+    if (!info) return interaction.reply({ content: '❌ Unknown game.', ephemeral: true });
+
+    // Solo games that can be auto-started with no args
+    const SOLO_AUTO_START = ['snake', '2048', 'memory', 'hol', 'wordle', 'hangman', 'trivia', 'guess', 'scramble', 'emojidecode', 'fasttype', 'quizshowdown', 'truthordare'];
+    const NEEDS_BET      = ['blackjack', 'slots', 'mines', 'dicepoker'];
+    const NEEDS_OPPONENT = ['ttt', 'connect4', 'rps', 'battleship', 'mathduel', 'wordchain', 'triviabattle', 'poker', 'wordbomb', 'murdermystery', 'teamtrivia'];
+
+    // Acknowledge immediately (ephemeral preview with description)
+    await interaction.reply({ ephemeral: true, embeds: [
+      new EmbedBuilder()
+        .setColor('#5865F2')
+        .setTitle(`${info.emoji} ${info.name}`)
+        .setDescription(info.desc)
+        .setFooter({ text: 'Use the command in chat, or click the button below to launch!' })
+        .setTimestamp()
+    ], components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`launchgame:${gameId}`)
+          .setLabel(`🚀 Launch ${info.name}`)
+          .setStyle(ButtonStyle.Success)
+      )
+    ]});
+    return;
+  }
+
+  // ── Launch Game — auto-fire command after description shown ────────────────
+  if (interaction.isButton() && interaction.customId.startsWith('launchgame:')) {
+    const gameId = interaction.customId.split(':')[1];
+    const channel = interaction.channel;
+    const user = interaction.user;
+
+    await interaction.deferUpdate().catch(() => {});
+
+    // For games that need no args, fake a message-like trigger
+    const SOLO_NO_ARG = ['snake', '2048', 'memory', 'hol', 'wordle', 'hangman', 'trivia', 'guess', 'scramble', 'emojidecode', 'fasttype', 'quizshowdown', 'truthordare'];
+
+    if (SOLO_NO_ARG.includes(gameId)) {
+      // Auto-start by sending the command as a regular message from the user
+      await channel.send(`> 🎮 <@${user.id}> launched **${gameId}** via the game menu!\n\`${process.env.PREFIX || '!'}${gameId}\``);
+    } else if (gameId === 'stopgame') {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
+        return interaction.followUp({ content: '❌ You need **Manage Messages** to stop games.', ephemeral: true });
+      }
+      const cid = channel.id;
+      let stopped = false;
+      if(tttGames[cid]){delete tttGames[cid];stopped=true;}
+      if(hangmanGames[cid]){delete hangmanGames[cid];stopped=true;}
+      if(triviaGames[cid]){delete triviaGames[cid];stopped=true;}
+      if(guessGames[cid]){delete guessGames[cid];stopped=true;}
+      if(c4Games[cid]){delete c4Games[cid];stopped=true;}
+      if(wordleGames[cid]){delete wordleGames[cid];stopped=true;}
+      if(mathDuelGames[cid]){delete mathDuelGames[cid];stopped=true;}
+      if(wordChainGames[cid]){delete wordChainGames[cid];stopped=true;}
+      if(triviaBattleGames[cid]){delete triviaBattleGames[cid];stopped=true;}
+      if(battleshipGames[cid]){delete battleshipGames[cid];stopped=true;}
+      if(scrambleGames[cid]){delete scrambleGames[cid];stopped=true;}
+      if(emojiDecodeGames[cid]){delete emojiDecodeGames[cid];stopped=true;}
+      if(fastTypeGames[cid]){delete fastTypeGames[cid];stopped=true;}
+      if(rpsGames[cid]){delete rpsGames[cid];stopped=true;}
+      if(pokerGames[cid]){delete pokerGames[cid];stopped=true;}
+      if(quizShowdownGames[cid]){delete quizShowdownGames[cid];stopped=true;}
+      if(wordBombGames[cid]){delete wordBombGames[cid];stopped=true;}
+      if(murderGames[cid]){delete murderGames[cid];stopped=true;}
+      if(teamTriviaGames[cid]){delete teamTriviaGames[cid];stopped=true;}
+      const uid = user.id;
+      if(bjGames[uid]){delete bjGames[uid];stopped=true;}
+      if(minesGames[uid]){delete minesGames[uid];stopped=true;}
+      if(snakeGames[uid]){delete snakeGames[uid];stopped=true;}
+      if(game2048[uid]){delete game2048[uid];stopped=true;}
+      if(memoryGames[uid]){delete memoryGames[uid];stopped=true;}
+      if(holGames[uid]){delete holGames[uid];stopped=true;}
+      if(dicePokerGames[uid]){delete dicePokerGames[uid];stopped=true;}
+      await channel.send({ embeds: [stopped ? successEmbed('🛑 Game Stopped', `All active games stopped by <@${uid}>.`) : errorEmbed('No active games found in this channel.')] });
+      return;
+    } else {
+      // Multiplayer or bet-required games — prompt in channel
+      const PREFIX = process.env.PREFIX || '!';
+      const promptMap = {
+        blackjack:  `💡 <@${user.id}> Type \`${PREFIX}blackjack <bet>\` to start Blackjack!`,
+        slots:      `💡 <@${user.id}> Type \`${PREFIX}slots <bet>\` to spin the Slots!`,
+        mines:      `💡 <@${user.id}> Type \`${PREFIX}mines <bet> [mines]\` to start Mines!`,
+        dicepoker:  `💡 <@${user.id}> Type \`${PREFIX}dicepoker <bet>\` to play Dice Poker!`,
+        ttt:        `💡 <@${user.id}> Type \`${PREFIX}ttt @opponent\` to start Tic Tac Toe!`,
+        connect4:   `💡 <@${user.id}> Type \`${PREFIX}connect4 @opponent\` to start Connect 4!`,
+        rps:        `💡 <@${user.id}> Type \`${PREFIX}rps @opponent\` or \`${PREFIX}rps rock/paper/scissors\` to play RPS!`,
+        battleship: `💡 <@${user.id}> Type \`${PREFIX}battleship @opponent\` to start Battleship!`,
+        mathduel:   `💡 <@${user.id}> Type \`${PREFIX}mathduel @opponent\` to start Math Duel!`,
+        wordchain:  `💡 <@${user.id}> Type \`${PREFIX}wordchain @opponent\` to start Word Chain!`,
+        triviabattle:`💡 <@${user.id}> Type \`${PREFIX}triviabattle @opponent\` to start Trivia Battle!`,
+        poker:      `💡 <@${user.id}> Type \`${PREFIX}poker @opponent\` to start Poker!`,
+        wordbomb:   `💡 <@${user.id}> Type \`${PREFIX}wordbomb @player1 @player2 …\` to start Word Bomb!`,
+        murdermystery:`💡 <@${user.id}> Type \`${PREFIX}murdermystery @p1 @p2 …\` to start Murder Mystery!`,
+        teamtrivia: `💡 <@${user.id}> Type \`${PREFIX}teamtrivia [teams] [rounds]\` to start Team Trivia!`,
+      };
+      const prompt = promptMap[gameId] || `💡 <@${user.id}> Type \`${PREFIX}${gameId}\` to start the game!`;
+      await channel.send(prompt);
+    }
+    return;
+  }
 
   // Open Ticket
   if (interaction.isButton() && interaction.customId === 'open_ticket') {
@@ -2715,6 +2856,95 @@ client.on('messageCreate', async (message) => {
 
     // ── !help ───────────────────────────────────────────────────────────────
     case 'help': case 'h': {
+      // ── Games Menu with Start Buttons ──────────────────────────────────────
+      const SOLO_GAMES = [
+        { id: 'blackjack', emoji: '🃏', name: 'Blackjack',    desc: 'Beat the dealer to 21 without busting.' },
+        { id: 'slots',     emoji: '🎰', name: 'Slots',        desc: 'Spin the slot machine and win big!' },
+        { id: 'mines',     emoji: '💣', name: 'Mines',        desc: 'Reveal gems, avoid the bombs!' },
+        { id: 'snake',     emoji: '🐍', name: 'Snake',        desc: 'Eat apples, grow your snake, survive!' },
+        { id: '2048',      emoji: '🎯', name: '2048',         desc: 'Merge tiles to reach 2048.' },
+        { id: 'memory',    emoji: '🟦', name: 'Memory Match', desc: 'Flip cards and find all the pairs.' },
+        { id: 'hol',       emoji: '📊', name: 'Higher/Lower', desc: 'Guess if the next value is higher or lower.' },
+        { id: 'dicepoker', emoji: '🎲', name: 'Dice Poker',   desc: 'Roll dice and build the best hand.' },
+        { id: 'wordle',    emoji: '🟩', name: 'Wordle',       desc: 'Guess the hidden 5-letter word in 6 tries.' },
+        { id: 'hangman',   emoji: '🪓', name: 'Hangman',      desc: 'Guess letters to save the hanging man.' },
+        { id: 'trivia',    emoji: '🧠', name: 'Trivia',       desc: 'Answer hard trivia questions to earn points.' },
+        { id: 'guess',     emoji: '🔢', name: 'Number Guess', desc: 'Guess the secret number in as few tries as possible.' },
+        { id: 'scramble',  emoji: '🔀', name: 'Scramble',     desc: 'Unscramble the jumbled word as fast as you can.' },
+        { id: 'emojidecode',emoji:'🔮',name: 'Emoji Decode',  desc: 'Decode what the emoji sequence means.' },
+      ];
+      const MULTI_GAMES = [
+        { id: 'ttt',           emoji: '❌', name: 'Tic Tac Toe',    desc: 'Classic 3×3 board game vs another player. Mention them!' },
+        { id: 'connect4',      emoji: '🔴', name: 'Connect 4',      desc: 'Drop pieces, connect 4 in a row vs a friend.' },
+        { id: 'rps',           emoji: '🪨', name: 'Rock Paper Scissors', desc: 'Best of rounds vs another player (or the bot!).' },
+        { id: 'battleship',    emoji: '🚢', name: 'Battleship',     desc: 'Sink your opponent\'s fleet on a 6×10 grid (A–F, 1–10).' },
+        { id: 'mathduel',      emoji: '🧮', name: 'Math Duel',      desc: 'Race to solve math equations before your opponent.' },
+        { id: 'wordchain',     emoji: '🔗', name: 'Word Chain',     desc: 'Chain words — each must start with the last letter.' },
+        { id: 'triviabattle',  emoji: '⚡', name: 'Trivia Battle',  desc: 'Competitive trivia — first correct answer wins the point.' },
+        { id: 'fasttype',      emoji: '⌨️', name: 'Fast Type',      desc: 'Type the given phrase faster than everyone else.' },
+        { id: 'quizshowdown',  emoji: '🏆', name: 'Quiz Showdown',  desc: 'Multi-player quiz where the best score wins.' },
+        { id: 'wordbomb',      emoji: '💥', name: 'Word Bomb',      desc: 'Type a word containing the given letters before time runs out.' },
+        { id: 'murdermystery', emoji: '🔍', name: 'Murder Mystery', desc: 'One murderer among players — deduce who did it!' },
+        { id: 'teamtrivia',    emoji: '👥', name: 'Team Trivia',    desc: 'Teams compete to answer trivia questions together.' },
+        { id: 'truthordare',   emoji: '🎭', name: 'Truth or Dare',  desc: 'Classic truth-or-dare with button choices.' },
+        { id: 'poker',         emoji: '♠️', name: 'Poker',          desc: 'Texas Hold\'em poker vs another player.' },
+      ];
+
+      // Build solo game embed + rows (max 5 buttons per ActionRow)
+      const soloEmbed = new EmbedBuilder()
+        .setColor('#5865F2')
+        .setTitle('🕹️ Solo Games — Click ▶ Start to Play!')
+        .setDescription(`> Prefix: \`${PREFIX}\` — Use \`${PREFIX}<command>\` to start any game directly.\n\u200b`)
+        .setFooter({ text: `${client.user.username}  •  Solo Games` });
+
+      SOLO_GAMES.forEach(g => {
+        soloEmbed.addFields({ name: `${g.emoji} ${g.name}`, value: g.desc, inline: true });
+      });
+
+      const soloRows = [];
+      for (let i = 0; i < SOLO_GAMES.length; i += 5) {
+        const row = new ActionRowBuilder();
+        SOLO_GAMES.slice(i, i + 5).forEach(g => {
+          row.addComponents(
+            new ButtonBuilder()
+              .setCustomId(`startgame:${g.id}`)
+              .setLabel(`▶ ${g.name}`)
+              .setStyle(ButtonStyle.Primary)
+          );
+        });
+        soloRows.push(row);
+      }
+
+      // Build multiplayer embed + rows
+      const multiEmbed = new EmbedBuilder()
+        .setColor('#FEE75C')
+        .setTitle('⚔️ Multiplayer Games — Click ▶ Start to Begin!')
+        .setDescription(`> Most multiplayer games need a **@mention**. If starting from button, mention your opponent in chat after!\n\u200b`)
+        .setFooter({ text: `${client.user.username}  •  Multiplayer Games` });
+
+      MULTI_GAMES.forEach(g => {
+        multiEmbed.addFields({ name: `${g.emoji} ${g.name}`, value: g.desc, inline: true });
+      });
+
+      const multiRows = [];
+      for (let i = 0; i < MULTI_GAMES.length; i += 5) {
+        const row = new ActionRowBuilder();
+        MULTI_GAMES.slice(i, i + 5).forEach(g => {
+          row.addComponents(
+            new ButtonBuilder()
+              .setCustomId(`startgame:${g.id}`)
+              .setLabel(`▶ ${g.name}`)
+              .setStyle(ButtonStyle.Success)
+          );
+        });
+        multiRows.push(row);
+      }
+
+      // Control row
+      const controlRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('startgame:stopgame').setLabel('🛑 Stop All Games').setStyle(ButtonStyle.Danger),
+      );
+
       const helpEmbed1 = new EmbedBuilder()
         .setColor('#5865F2')
         .setTitle('✦ Command Center')
@@ -2724,33 +2954,8 @@ client.on('messageCreate', async (message) => {
           `\u200b`
         )
         .addFields(
-          {
-            name: '━━━━━━━━━━  🎮  GAMES  ━━━━━━━━━━',
-            value: '\u200b',
-          },
-          {
-            name: '🕹️  Solo Games',
-            value:
-              '`blackjack` `slots` `mines` `snake` `2048`\n' +
-              '`memory` `hol` `dicepoker` `wordle` `hangman`\n' +
-              '`trivia` `guess` `scramble` `emojidecode`',
-            inline: false,
-          },
-          {
-            name: '⚔️  Multiplayer Games',
-            value:
-              '`ttt @user` `connect4 @user` `rps @user` `battleship @user`\n' +
-              '`mathduel @user` `wordchain @user` `triviabattle @user`\n' +
-              '`poker @user` `wordbomb @u1 @u2…` `murdermystery @u1 @u2…`\n' +
-              '`fasttype` `truthordare` `quizshowdown` `triviamarathon`\n' +
-              '`teamtrivia [teams] [rounds]` `rps rock/paper/scissors` *(vs bot)*',
-            inline: false,
-          },
-          {
-            name: '🛑  Game Control',
-            value: '`stopgame` — End all active games in this channel *(Mod only)*',
-            inline: false,
-          },
+          { name: '🎮 Games', value: 'See below! Click any **▶ Start** button to launch a game instantly.', inline: false },
+          { name: '🛑 Game Control', value: '`stopgame` — End all active games in this channel *(Mod only)*', inline: false },
         )
         .setFooter({ text: `${client.user.username}  •  Page 1 of 2 — Server & Utility` });
 
@@ -2816,7 +3021,12 @@ client.on('messageCreate', async (message) => {
         )
         .setFooter({ text: `${client.user.username}  •  Page 2 of 2 — Games` });
 
-      message.reply({ embeds: [helpEmbed1, helpEmbed2] });
+      // Send server/utility help
+      await message.reply({ embeds: [helpEmbed1, helpEmbed2] });
+      // Send solo games embed with start buttons
+      await message.channel.send({ embeds: [soloEmbed], components: soloRows });
+      // Send multiplayer games embed with start buttons
+      await message.channel.send({ embeds: [multiEmbed], components: [...multiRows, controlRow] });
       break;
     }
 
@@ -3551,11 +3761,11 @@ client.on('messageCreate', async (message) => {
       const g={p1:message.author.id,p2:opp.id,board1:b1,board2:b2,ships1,ships2,shots1:[],shots2:[],currentTurn:message.author.id};
       battleshipGames[message.channel.id]=g;
       const battleEmbed = new EmbedBuilder().setColor('#3498DB').setTitle('🚢 Battleship — Battle Begins! ⚓')
-        .setDescription(`<@${message.author.id}> vs <@${opp.id}>\n\n**Grid:** 15×15 (A–O columns, 1–15 rows)\n**Ships:** ${ships1.map(s=>s.name).join(', ')}\n\n<@${g.currentTurn}>'s turn! Type a coordinate like \`A1\`, \`H8\`, \`O15\`\n\n${renderBSGrid(b2,[])}`)
+        .setDescription(`<@${message.author.id}> vs <@${opp.id}>\n\n**Grid:** 6×10 (A–F columns, 1–10 rows)\n**Ships:** ${ships1.map(s=>s.name).join(', ')}\n\n<@${g.currentTurn}>'s turn! Type a coordinate like \`A1\`, \`H8\`, \`O15\`\n\n${renderBSGrid(b2,[])}`)
         .setTimestamp();
       try {
         const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#3498DB').setTitle('🚢 Battleship')
-          .setDescription(`⚓ **${message.author.username}** vs **${opp.user.username}**!\n\n• 15×15 grid (A–O columns, 1–15 rows)\n• Ships placed secretly — sink them all to win!\n• Type coordinates like \`A1\`, \`H8\`, \`O15\`\n• 💥 = Hit | 〰️ = Miss | 🟦 = Unknown\n• Ships: ${ships1.map(s=>s.name).join(', ')}\n\n*Deploying fleets...*`).setTimestamp()]});
+          .setDescription(`⚓ **${message.author.username}** vs **${opp.user.username}**!\n\n• 6×10 grid (A–F columns, 1–10 rows)\n• Ships placed secretly — sink them all to win!\n• Type coordinates like \`A1\`, \`H8\`, \`O15\`\n• 💥 = Hit | 〰️ = Miss | 🟦 = Unknown\n• Ships: ${ships1.map(s=>s.name).join(', ')}\n\n*Deploying fleets...*`).setTimestamp()]});
         await sleep(900);
         await initMsg.edit({embeds:[battleEmbed]});
       } catch {
