@@ -587,8 +587,18 @@ function buildTriviaBattleRows(disabled) {
 }
 
 // ─── Battleship Helpers ───────────────────────────────────────────────────────
-const BS_SIZE = 5;
-const BS_SHIPS = [{name:'Carrier',len:3},{name:'Destroyer',len:2},{name:'Sub',len:1},{name:'Sub2',len:1}]; // total 7 cells on 5x5
+const BS_SIZE = 15;
+const BS_COLS = 'ABCDEFGHIJKLMNO'; // 15 columns
+const BS_SHIPS = [
+  {name:'Carrier',len:5},
+  {name:'Battleship',len:4},
+  {name:'Cruiser',len:3},
+  {name:'Submarine',len:3},
+  {name:'Destroyer',len:2},
+  {name:'Patrol Boat',len:2},
+  {name:'Scout',len:1},
+  {name:'Scout 2',len:1},
+]; // total 21 cells on 15x15
 function makeBSBoard() { return Array.from({length:BS_SIZE},()=>Array(BS_SIZE).fill(0)); }
 function placeBSShips(board) {
   const ships=[];
@@ -611,24 +621,32 @@ function placeBSShips(board) {
   return ships;
 }
 function renderBSGrid(board, shots, showShips=false) {
-  const COLS='ABCDE';
-  let out='`  A B C D E`\n';
-  for(let r=0;r<BS_SIZE;r++){
-    let row=`\`${r+1} `;
-    for(let c=0;c<BS_SIZE;c++){
-      const hit=shots.some(s=>s[0]===r&&s[1]===c);
-      if(hit){ row+=board[r][c]===1?'💥':'〰'; }
-      else if(showShips&&board[r][c]===1){ row+='🚢'; }
-      else { row+='🟦'; }
+  // Split into two halves for Discord's message length limits
+  const half = Math.ceil(BS_SIZE / 2);
+  function renderHalf(startCol, endCol) {
+    const header = '`  ' + BS_COLS.slice(startCol, endCol).split('').join(' ') + '`';
+    let out = header + '\n';
+    for(let r=0;r<BS_SIZE;r++){
+      let row=`\`${String(r+1).padStart(2)} `;
+      for(let c=startCol;c<endCol;c++){
+        const hit=shots.some(s=>s[0]===r&&s[1]===c);
+        if(hit){ row+=board[r][c]===1?'💥':'〰'; }
+        else if(showShips&&board[r][c]===1){ row+='🚢'; }
+        else { row+='🟦'; }
+      }
+      out+=row+'`\n';
     }
-    out+=row+'`\n';
+    return out;
   }
-  return out;
+  return renderHalf(0, half) + '\n' + renderHalf(half, BS_SIZE);
 }
 function parseBSCoord(str) {
-  const m=str.trim().toUpperCase().match(/^([A-E])([1-5])$/);
+  const m=str.trim().toUpperCase().match(/^([A-O])(\d{1,2})$/);
   if(!m) return null;
-  return [parseInt(m[2])-1,'ABCDE'.indexOf(m[1])];
+  const row=parseInt(m[2])-1;
+  const col=BS_COLS.indexOf(m[1]);
+  if(row<0||row>=BS_SIZE||col<0) return null;
+  return [row, col];
 }
 function buildBSEmbed(g, whose='your') {
   const opp=whose==='your'?g.p2:g.p1;
@@ -637,7 +655,7 @@ function buildBSEmbed(g, whose='your') {
   const ships=whose==='your'?g.ships2:g.ships1;
   const sunk=ships.filter(s=>s.hits>=s.len).length;
   return new EmbedBuilder().setColor('#3498DB').setTitle(`🚢 Battleship — <@${g.currentTurn}>'s Turn`)
-    .setDescription(`**Your Attack Grid** (targeting <@${opp}>)\n${renderBSGrid(board,shots)}\n💥 Hits shown | 〰 Miss | 🟦 Unknown\n\n**Ships sunk:** ${sunk}/${ships.length} | Type a coordinate like \`A1\`, \`C3\`, \`E5\``)
+    .setDescription(`**Your Attack Grid** (targeting <@${opp}>)\n${renderBSGrid(board,shots)}\n💥 Hits shown | 〰 Miss | 🟦 Unknown\n\n**Ships sunk:** ${sunk}/${ships.length} | Type a coordinate like \`A1\`, \`H8\`, \`O15\``)
     .setTimestamp();
 }
 
@@ -903,15 +921,182 @@ const TRIVIA = [
 ];
 
 // ─── Wordle Words — HARD (uncommon but valid 5-letter English words) ──────────
+// ─── Wordle answer pool (common, well-known 5-letter English words) ───────────
 const WORDLE_WORDS = [
-  // Hard but real words
-  'quirk','gnash','dwarf','fjord','juicy','ethic','oxide','lymph','epoxy','squid',
-  'flunk','perky','caulk','psalm','twixt','glyph','vouch','expel','aphid','bayou',
-  'gauze','tryst','kudos','lyric','maxim','nexus','onyx','privy','quaff','scythe',
-  'suave','taboo','ulcer','venom','wrath','yacht','zesty','abhor','bliss','chasm',
-  'dross','ebony','flirt','gaunt','havoc','joust','kneel','lapel','mayhem','nymph',
-  'optic','pivot','quilt','rivet','smirk','thyme','unfed','vigor','winch','xenon',
+  'about','above','abuse','acute','admit','adopt','adult','after','again','agent',
+  'agree','ahead','alarm','album','alert','alike','align','alive','alley','allow',
+  'alone','along','alter','angel','anger','angle','angry','anime','ankle','annex',
+  'antic','anvil','aorta','apple','apply','apron','arena','argue','arise','armor',
+  'aroma','arose','array','arrow','arson','artsy','aside','asked','asset','atlas',
+  'attic','audio','audit','aunts','avail','avocado','avoid','awake','award','aware',
+  'awful','basic','basis','batch','beach','beard','beast','began','begin','being',
+  'below','bench','berry','black','blade','blame','bland','blank','blast','blaze',
+  'bleed','blend','bless','blind','blink','block','blood','bloom','blown','board',
+  'bonus','boost','booth','bound','boxer','brace','braid','brain','brand','brave',
+  'bread','break','breed','brick','bride','brief','bring','broad','broke','brook',
+  'brown','build','built','burst','buyer','cabin','candy','canon','cargo','carry',
+  'catch','cause','chain','chair','chalk','chaos','chart','chase','cheap','check',
+  'cheek','cheer','chess','chest','chief','child','china','chips','claim','clash',
+  'class','clean','clear','clerk','click','cliff','clock','close','cloud','coast',
+  'color','comet','comic','comma','coral','couch','could','count','court','cover',
+  'crack','craft','crane','crash','crawl','cream','creek','crime','crisp','cross',
+  'crowd','crown','crush','curve','cycle','daily','dairy','dance','death','debut',
+  'decay','delay','dense','depot','depth','devil','dirty','disco','dodge','doing',
+  'doubt','dough','draft','drain','drama','drank','dread','dream','dress','drift',
+  'drink','drive','drove','drown','dunno','dusty','dwarf','early','earth','eight',
+  'elect','elite','empty','ended','enjoy','enter','entry','equal','essay','ethic',
+  'evoke','exact','exist','extra','faint','faith','fancy','fault','feast','fence',
+  'ferry','fever','field','fight','final','first','fixed','fjord','flame','flare',
+  'flash','fleet','flesh','flint','float','flood','floor','flour','fluid','focus',
+  'force','forge','forum','found','frame','frank','fraud','fresh','front','frost',
+  'fruit','fully','funny','genre','ghost','given','gland','glass','gloom','gloss',
+  'glove','glued','gnash','going','grace','grade','grain','grand','grant','graph',
+  'grasp','grass','grave','greed','green','greet','grief','grill','grind','groan',
+  'groin','groom','group','grove','grown','guess','guest','guide','guild','guile',
+  'guilt','gusto','happy','harsh','haven','heart','heavy','hedge','hence','hinge',
+  'hippo','hobby','honor','horse','hotel','hotel','hours','house','human','humor',
+  'hurry','ideal','image','imply','inbox','index','indie','infer','inner','input',
+  'inter','intro','issue','ivory','joust','judge','juice','juicy','karma','kneel',
+  'known','kudos','label','large','laser','laugh','layer','learn','lease','leave',
+  'legal','lemon','level','light','limit','liver','liver','llama','local','lodge',
+  'logic','login','loose','lover','lower','lowly','lucky','lunar','lyric','magic',
+  'major','maker','manor','maple','march','match','maxim','mayor','media','mercy',
+  'merge','merit','metal','might','minor','minus','model','money','month','moral',
+  'mould','mound','mount','mouse','mouth','moved','movie','muddy','music','naive',
+  'nerve','never','nexus','night','ninja','noble','noise','north','noted','novel',
+  'nurse','nymph','occur','offer','often','oiled','olive','onion','opera','optic',
+  'orbit','order','organ','other','outer','owned','owner','oxide','ozone','paint',
+  'panel','panic','paper','party','pasta','patch','pause','peace','pearl','pedal',
+  'penny','perch','perky','phase','phone','photo','piano','piece','pilot','pinch',
+  'pitch','pixel','pizza','place','plain','plane','plant','plaza','plead','plumb',
+  'plume','plump','plunge','point','polar','power','press','price','pride','prime',
+  'print','prior','probe','prone','proof','prose','proud','prowl','psalm','pulse',
+  'punch','pupil','puppy','purse','quaff','quest','quick','quiet','quirk','quota',
+  'quote','rabbi','radar','radio','raise','rally','ranch','range','rapid','ratio',
+  'reach','react','realm','rebel','refer','reign','relax','remix','repay','repel',
+  'reply','rerun','reset','ridge','right','rigid','risky','rivet','robot','rocky',
+  'rouge','rough','round','route','royal','rugby','ruler','runny','rural','rusty',
+  'sadly','saint','salad','salon','sandy','sauce','scale','scare','scene','score',
+  'scout','screw','seize','sense','setup','seven','shard','share','shark','sharp',
+  'sheen','sheep','sheer','shelf','shell','shift','shine','shirt','shock','shoot',
+  'shore','shout','shrug','siege','siren','sixth','skill','slack','slant','slate',
+  'sleek','sleep','slice','slide','slime','slope','smack','small','smart','smell',
+  'smile','smirk','smoke','snake','solar','solid','solve','sorry','south','space',
+  'spark','spawn','speak','spend','spice','spill','spine','spite','split','spoon',
+  'spore','sport','spray','squad','squid','stack','staff','stage','stain','stair',
+  'stake','stamp','stand','stark','stash','state','stays','steam','steel','steep',
+  'steer','stern','stick','stiff','still','stock','stoic','stole','stone','stood',
+  'store','storm','story','strap','straw','stray','strip','strum','study','style',
+  'suave','sugar','suite','sunny','super','surge','swamp','swear','sweep','sweet',
+  'swept','swift','swipe','sword','synth','taboo','taste','tense','terms','thief',
+  'thick','thing','think','third','thorn','those','three','threw','throw','thrum',
+  'thyme','tidal','tiger','tight','timer','title','toast','today','token','total',
+  'touch','tough','tower','toxic','track','trade','trail','train','trait','trash',
+  'trawl','tread','treat','trend','trial','tribe','trick','tried','troop','trove',
+  'truck','truly','tryst','tuned','twice','twist','twixt','ultra','uncle','under',
+  'unify','union','unite','unity','until','upper','upset','urban','usage','usual',
+  'utter','valid','value','valve','vapor','vault','video','vigil','vigor','viral',
+  'virus','visit','vital','vivid','voice','voter','vouch','vowel','waste','water',
+  'weary','weave','wedge','weird','wheat','wheel','where','which','while','white',
+  'whole','whose','wield','winch','witch','woman','women','world','worry','worse',
+  'worst','worth','would','wound','wrath','wrist','wrote','xenon','yacht','young',
+  'yours','youth','zebra','zesty','zippy','zonal',
 ];
+
+// ─── Wordle valid-guess dictionary (all common 5-letter English words) ─────────
+// Includes the answer pool above + thousands more real English words for validation
+const WORDLE_VALID_WORDS = new Set([
+  ...WORDLE_WORDS,
+  // Additional valid guesses (real English words, not used as answers)
+  'aahed','aalii','abaci','abaft','abase','abash','abate','abbey','abbot','abeam',
+  'abhor','abide','abler','abode','aboon','abbot','abuzz','acock','acorn','acrid',
+  'acted','acmes','acned','acnes','acres','acock','addax','adder','adieu','adman',
+  'adobe','aegis','afoul','agape','agave','agaze','aglow','agone','agony','agora',
+  'agued','ahull','aided','aimer','aired','aitch','alack','algae','algal','allay',
+  'aloft','aloud','alpha','alula','alums','amass','amaze','ambry','amice','amide',
+  'amiss','amour','ample','amuse','ancon','anear','anele','anent','anime','ankh',
+  'annul','anode','apace','apian','apish','aport','arced','ardor','areal','ariel',
+  'ashed','ashen','asker','assay','atilt','atoll','atone','atony','atopy','attar',
+  'auger','augur','avian','avion','awash','awful','awing','awned','awoke','awry',
+  'azide','azure','babel','badly','bagel','baggy','baize','balky','baulk','beady',
+  'beefy','befit','belle','belly','besot','bidet','bight','bigot','bilge','bilgy',
+  'binge','bison','bitsy','bitty','blare','bleat','bloke','blunt','boded','boggy',
+  'bogus','boite','bolus','bossy','botch','bothy','boxed','breve','briny','brisk',
+  'broil','brood','bruise','brunt','brusk','bucky','buddy','buggy','bulge','bulgy',
+  'bully','bumpy','bunny','burly','burro','bushy','busty','butch','butty','cacao',
+  'caddy','cadet','caiman','cairn','calve','cameo','canny','canoe','caper','capon',
+  'carob','carom','catnip','catty','caulk','ceded','cello','champ','chant','chary',
+  'chasm','cheep','chert','chide','chime','chimp','choir','chomp','chord','chore',
+  'chump','chunk','cider','cigar','cirri','civic','civvy','clack','clamp','clang',
+  'clank','claro','cleat','cleave','cleft','cliché','clink','cloak','clone','clot',
+  'clout','clove','coaly','cobra','cocoa','coked','comfy','compa','condo','coney',
+  'conky','copal','copse','comet','corgi','corny','cozen','cramp','crave','credo',
+  'creep','crepe','crick','croup','crumb','cruse','crypts','cubby','cubic','cupid',
+  'curly','curry','cutey','cutie','daddy','daffy','dally','dandy','darer','davit',
+  'daffy','decal','decoy','decry','delta','demon','derma','deter','dicey','dicot',
+  'disco','ditty','divvy','dodgy','dolly','donna','doozy','dopey','dorky','dotty',
+  'dowdy','dowel','downy','dowse','doyen','drake','drawl','drily','droit','drone',
+  'drool','droop','drupe','dryer','dully','dumpy','dunce','duped','dusky','eclat',
+  'edged','edger','eerie','egads','egret','elide','elite','emcee','emend','enact',
+  'ennui','epact','epode','ergot','event','every','evict','expel','extol','exude',
+  'exult','eyrie','fable','facet','fairy','faker','fakir','farce','fatal','fauna',
+  'feign','feral','fetid','fetal','fiber','filch','filet','filly','filmy','finch',
+  'fined','fishy','fizzy','flair','flank','fleck','fleck','flier','fling','flint',
+  'flirt','floss','fluky','flute','flyer','foamy','focal','folly','foray','forge',
+  'forgo','forte','foyer','frail','freak','friar','frill','frond','frugal','frump',
+  'fudge','fugue','fungi','funky','fussy','fuzzy','gable','galley','gamey','gamin',
+  'gamut','gassy','gaudy','gauze','gavel','gawky','geeky','gecko','genie','genre',
+  'getup','ghoul','giddy','gilet','gimpy','girly','glare','glint','gloat','glogg',
+  'gloom','gluon','glyph','godly','going','golly','gonzo','gorge','gorse','gouty',
+  'graft','grimy','gripe','grout','gruel','gruff','grume','grump','guava','gulch',
+  'gummy','gunky','guppy','gutsy','hammy','handy','hardy','harpy','hasty','hazel',
+  'heave','hefty','helix','hellion','hippy','hoary','hoboe','holly','homer','hoary',
+  'hooky','horny','hovel','hulky','humus','hunky','hurly','husky','hyena','hyper',
+  'icily','icky','icing','imago','impel','incur','indie','inept','inert','infix',
+  'ingot','inlay','inlet','inset','inter','irate','irked','itchy','jingo','jingo',
+  'jiffy','jimmy','juror','kebab','ketch','kinky','knack','knave','knoll','knuck',
+  'lanky','lapel','lardy','larva','lasso','latke','leaky','leggy','lemur','libel',
+  'lichen','lingo','liner','liner','lingo','linky','lippy','listy','livid','llano',
+  'loamy','loopy','lousy','lumpy','lusty','lying','mafia','mambo','mammal','mango',
+  'manor','maori','mauve','mealy','measly','medic','melee','micro','mimed','mimic',
+  'minty','mirth','miser','missy','misty','mogul','moldy','moist','moose','mossy',
+  'motto','mousy','muggy','mulch','mummy','murky','mushy','musky','musty','myrrh',
+  'nabob','natch','natty','nerdy','nettle','nifty','nippy','nitty','noddy','noisy',
+  'nonce','nooky','norma','nubby','nutty','nymph','oaken','oater','occur','offal',
+  'oldie','ombre','onset','opera','opsin','ovoid','ovule','owing','ozone','paddy',
+  'pansy','panty','papaw','parka','parry','patsy','patty','paunchy','penal','perky',
+  'pesky','petty','pewit','phage','phony','picky','piggy','piney','pinky','pipit',
+  'pique','pithy','piton','plaid','plait','pleat','plonk','pluck','podgy','pokey',
+  'polka','poppy','potty','pouty','preen','privy','primp','prink','prior','privy',
+  'pshaw','pubic','pudgy','pudgy','puffed','pulpy','punky','punny','puppy','purty',
+  'pushy','quaff','quaky','qualm','queen','queue','quill','quip','quirky','quota',
+  'rabid','rainy','rakish','rampage','rancid','randy','rangy','rangy','raspy','ratty',
+  'rawly','rebut','recap','recut','redux','reedy','refit','relax','remix','renal',
+  'retch','retry','retro','ribby','rifled','right','risky','roomy','ropey','ruddy',
+  'rugby','ruler','rummy','runup','sacky','saggy','salsa','sappy','sassy','savor',
+  'savvy','scald','scalp','scaly','scamp','scant','scone','scoop','scoot','scorn',
+  'scott','scram','scrub','scrum','sedan','seedy','shack','shady','shaky','shawl',
+  'sheaf','sheen','shiny','shoal','showy','shrub','shrivel','shuck','shunt','silly',
+  'sinew','siren','sixth','sixty','skewy','skimp','skipper','skirt','skulk','slang',
+  'sleek','sleet','slick','slosh','sloth','slump','slung','slunk','slurp','slyly',
+  'smelt','smite','smolt','snobbish','snoop','snore','snort','snowy','snuck','soggy',
+  'solid','sonic','soppy','sorry','spank','spasm','speck','spill','spiny','spirt',
+  'spoof','spook','spool','spore','spout','sprout','spunk','spurn','spurt','squab',
+  'squall','squat','squelch','stab','staid','staunch','stays','stealth','stilt',
+  'stomp','stony','stove','strap','strut','stubby','stuck','study','stung','stunk',
+  'stunt','suede','sulky','sumac','surly','swung','tabby','taffy','tangy','tardy',
+  'tarry','tatty','tawny','tepid','terse','testy','their','theirs','thick','thong',
+  'thorn','throb','throe','tiara','tight','tilde','tippy','tipsy','titan','toady',
+  'tonal','topaz','toque','torso','total','totty','totem','toxic','toyon','tread',
+  'treed','trees','trice','trite','troth','trump','trunk','tubby','tulip','tumor',
+  'tunic','turbo','turfy','tushy','tusky','twang','tweak','twerp','twigg','twill',
+  'ulcer','ultra','uncut','undue','unfit','unwed','unzip','uppity','usurp','vague',
+  'vapid','vaunt','vegan','venal','venom','venue','verge','verse','vicar','villa',
+  'viper','vireo','vogue','voila','vomit','vying','wacky','wader','waged','wagon',
+  'waken','wanly','warty','waspy','weedy','welch','wimpy','windy','wispy','witty',
+  'wobbly','womby','wonky','wormy','wrack','wraith','wrung','wryly','yucky','yummy',
+  'zappy','zappy','zingy','zippy','zombi','zoned',
+]);
 
 function evaluateWordle(guess, word) {
   const res = Array(5).fill(null).map((_,i) => ({l:guess[i], e:'⬛'}));
@@ -2348,7 +2533,7 @@ client.on('messageCreate', async (message) => {
       }
       bsGame.currentTurn=bsGame.currentTurn===bsGame.p1?bsGame.p2:bsGame.p1;
       return message.reply({embeds:[new EmbedBuilder().setColor(hit?'#E74C3C':'#3498DB').setTitle(`🚢 Battleship — ${hit?'💥 HIT!':'〰️ Miss!'}`)
-        .setDescription(`**${message.author.username}** fires at **${message.content.trim().toUpperCase()}** — ${hit?'💥 HIT!':'〰️ Miss!'}${sunkMsg}\n\n${renderBSGrid(targetBoard,shots)}\n\n<@${bsGame.currentTurn}>'s turn! Type a coordinate (e.g. \`A1\`)`)
+        .setDescription(`**${message.author.username}** fires at **${message.content.trim().toUpperCase()}** — ${hit?'💥 HIT!':'〰️ Miss!'}${sunkMsg}\n\n${renderBSGrid(targetBoard,shots)}\n\n<@${bsGame.currentTurn}>'s turn! Type a coordinate (e.g. \`A1\`, \`H8\`, \`O15\`)`)
         .setTimestamp()]});
     }
   }
@@ -2405,6 +2590,7 @@ client.on('messageCreate', async (message) => {
   if (wlGame && !message.content.startsWith(PREFIX)) {
     const g=message.content.trim().toLowerCase();
     if (g.length!==5||!/^[a-z]+$/.test(g)) return;
+    if (!WORDLE_VALID_WORDS.has(g)) return message.reply(`❌ **"${g.toUpperCase()}"** is not a valid English word! Try another word.`);
     const result=evaluateWordle(g,wlGame.word);
     wlGame.guesses.push({g,result,uid:message.author.id});
     const won=g===wlGame.word, lost=wlGame.guesses.length>=6&&!won;
@@ -2529,21 +2715,108 @@ client.on('messageCreate', async (message) => {
 
     // ── !help ───────────────────────────────────────────────────────────────
     case 'help': case 'h': {
-      message.reply({embeds:[new EmbedBuilder().setColor('#5865F2').setTitle('📚 Bot Commands').setDescription(`Prefix: \`${PREFIX}\``)
+      const helpEmbed1 = new EmbedBuilder()
+        .setColor('#5865F2')
+        .setTitle('✦ Command Center')
+        .setDescription(
+          `> Prefix: \`${PREFIX}\` — All commands start with \`${PREFIX}\`\n` +
+          `> Use \`${PREFIX}help\` anytime to see this menu.\n` +
+          `\u200b`
+        )
         .addFields(
-          {name:'🛡️ Moderation', value:`\`kick\` \`ban\` \`unban\` \`mute\` \`unmute\` \`warn\` \`warnings\` \`clearwarnings\` \`slowmode\` \`lock\` \`unlock\``},
-          {name:'🗑️ Messages',   value:`\`purge\` \`purgeuser\``},
-          {name:'📊 Info',       value:`\`userinfo\` \`serverinfo\` \`botinfo\` \`ping\` \`avatar\` \`roleinfo\` \`profile\``},
-          {name:'📩 DM',         value:`\`dm\` \`dmall\` \`announce\`\n> \`!dm @user1 @user2 message\` — DM multiple users (rate-limited)`},
-          {name:'😂 Fun',        value:`\`meme\` \`joke\` \`8ball\` \`ship\` \`fight\` \`slap\` \`hug\` \`kiss\` \`pat\` \`coinflip\` \`roll\` \`gay\` \`iq\` \`rizz\` \`aura\` \`simp\` \`drip\` \`sus\``},
-          {name:'🎮 Games (Solo)',value:`\`blackjack\` \`slots\` \`mines\` \`snake\` \`2048\` \`memory\` \`hol\` \`dicepoker\`\n> \`wordle\` \`hangman\` \`trivia\` \`guess\` \`scramble\` \`emojidecode\` (anyone can join!)`},
-          {name:'⚔️ Multiplayer Games',value:`\`ttt @user\` \`connect4 @user\` \`rps @user\` \`battleship @user\`\n> \`mathduel @user\` \`wordchain @user\` \`triviabattle @user\`\n> \`poker @user\` \`wordbomb @u1 @u2...\` \`murdermystery @u1 @u2...\`\n> \`fasttype\` \`truthordare [@u1 @u2...]\` \`quizshowdown\` \`triviamarathon\`\n> \`rps rock/paper/scissors\` — vs bot\n> \`teamtrivia [2-4] [3-20]\` — **Team Trivia** (button team select!)`},
-          {name:'🛑 Game Control',value:`\`stopgame\` — Stop all active games in channel (Mod only)`},
-          {name:'🎫 Tickets',    value:`\`ticket\` \`ticketset\` \`ticketreset\``},
-          {name:'🎉 Welcome',    value:`\`welcomeset\` \`welcometest\``},
-          {name:'🛠️ Utility',   value:`\`say\` \`embed\` \`poll\``},
-          {name:'🎭 Status',     value:`\`addstatus\` \`removestatus\` \`liststatus\` \`clearstatus\``},
-        ).setFooter({text:`${client.user.username} • All commands use prefix ${PREFIX}`})]});
+          {
+            name: '━━━━━━━━━━  🎮  GAMES  ━━━━━━━━━━',
+            value: '\u200b',
+          },
+          {
+            name: '🕹️  Solo Games',
+            value:
+              '`blackjack` `slots` `mines` `snake` `2048`\n' +
+              '`memory` `hol` `dicepoker` `wordle` `hangman`\n' +
+              '`trivia` `guess` `scramble` `emojidecode`',
+            inline: false,
+          },
+          {
+            name: '⚔️  Multiplayer Games',
+            value:
+              '`ttt @user` `connect4 @user` `rps @user` `battleship @user`\n' +
+              '`mathduel @user` `wordchain @user` `triviabattle @user`\n' +
+              '`poker @user` `wordbomb @u1 @u2…` `murdermystery @u1 @u2…`\n' +
+              '`fasttype` `truthordare` `quizshowdown` `triviamarathon`\n' +
+              '`teamtrivia [teams] [rounds]` `rps rock/paper/scissors` *(vs bot)*',
+            inline: false,
+          },
+          {
+            name: '🛑  Game Control',
+            value: '`stopgame` — End all active games in this channel *(Mod only)*',
+            inline: false,
+          },
+        )
+        .setFooter({ text: `${client.user.username}  •  Page 1 of 2 — Server & Utility` });
+
+      const helpEmbed2 = new EmbedBuilder()
+        .setColor('#57F287')
+        .setTitle('✦ Command Center')
+        .setDescription(
+          `> Prefix: \`${PREFIX}\` — All commands start with \`${PREFIX}\`\n` +
+          `\u200b`
+        )
+        .addFields(
+          {
+            name: '━━━━━━  🛡️  SERVER & UTILITY  ━━━━━━',
+            value: '\u200b',
+          },
+          {
+            name: '🔨  Moderation',
+            value:
+              '`kick` `ban` `unban` `mute` `unmute`\n' +
+              '`warn` `warnings` `clearwarnings`\n' +
+              '`slowmode` `lock` `unlock` `purge` `purgeuser`',
+            inline: true,
+          },
+          {
+            name: '📊  Info & Stats',
+            value:
+              '`userinfo` `serverinfo` `botinfo`\n' +
+              '`ping` `avatar` `roleinfo` `profile`',
+            inline: true,
+          },
+          {
+            name: '\u200b',
+            value: '\u200b',
+            inline: false,
+          },
+          {
+            name: '😂  Fun',
+            value:
+              '`meme` `joke` `8ball` `ship` `fight`\n' +
+              '`slap` `hug` `kiss` `pat` `coinflip`\n' +
+              '`roll` `gay` `iq` `rizz` `aura` `simp` `drip` `sus`',
+            inline: true,
+          },
+          {
+            name: '🛠️  Utility & Server',
+            value:
+              '`say` `embed` `poll`\n' +
+              '`dm` `dmall` `announce`\n' +
+              '`ticket` `ticketset` `ticketreset`\n' +
+              '`welcomeset` `welcometest`',
+            inline: true,
+          },
+          {
+            name: '\u200b',
+            value: '\u200b',
+            inline: false,
+          },
+          {
+            name: '🎭  Status *(Owner only)*',
+            value: '`addstatus` `removestatus` `liststatus` `clearstatus`',
+            inline: false,
+          },
+        )
+        .setFooter({ text: `${client.user.username}  •  Page 2 of 2 — Games` });
+
+      message.reply({ embeds: [helpEmbed1, helpEmbed2] });
       break;
     }
 
@@ -3278,11 +3551,11 @@ client.on('messageCreate', async (message) => {
       const g={p1:message.author.id,p2:opp.id,board1:b1,board2:b2,ships1,ships2,shots1:[],shots2:[],currentTurn:message.author.id};
       battleshipGames[message.channel.id]=g;
       const battleEmbed = new EmbedBuilder().setColor('#3498DB').setTitle('🚢 Battleship — Battle Begins! ⚓')
-        .setDescription(`<@${message.author.id}> vs <@${opp.id}>\n\n**Grid:** 5×5 (A–E columns, 1–5 rows)\n**Ships:** ${ships1.map(s=>s.name).join(', ')}\n\n<@${g.currentTurn}>'s turn! Type a coordinate like \`A1\`, \`C3\`, \`E5\`\n\n${renderBSGrid(b2,[])}`)
+        .setDescription(`<@${message.author.id}> vs <@${opp.id}>\n\n**Grid:** 15×15 (A–O columns, 1–15 rows)\n**Ships:** ${ships1.map(s=>s.name).join(', ')}\n\n<@${g.currentTurn}>'s turn! Type a coordinate like \`A1\`, \`H8\`, \`O15\`\n\n${renderBSGrid(b2,[])}`)
         .setTimestamp();
       try {
         const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#3498DB').setTitle('🚢 Battleship')
-          .setDescription(`⚓ **${message.author.username}** vs **${opp.user.username}**!\n\n• 5×5 grid (A–E columns, 1–5 rows)\n• Ships placed secretly — sink them all to win!\n• Type coordinates like \`A1\`, \`C3\`, \`E5\`\n• 💥 = Hit | 〰️ = Miss | 🟦 = Unknown\n• Ships: ${ships1.map(s=>s.name).join(', ')}\n\n*Deploying fleets...*`).setTimestamp()]});
+          .setDescription(`⚓ **${message.author.username}** vs **${opp.user.username}**!\n\n• 15×15 grid (A–O columns, 1–15 rows)\n• Ships placed secretly — sink them all to win!\n• Type coordinates like \`A1\`, \`H8\`, \`O15\`\n• 💥 = Hit | 〰️ = Miss | 🟦 = Unknown\n• Ships: ${ships1.map(s=>s.name).join(', ')}\n\n*Deploying fleets...*`).setTimestamp()]});
         await sleep(900);
         await initMsg.edit({embeds:[battleEmbed]});
       } catch {
