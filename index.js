@@ -213,6 +213,8 @@ const snakeGames = {}, game2048 = {}, rpsGames = {}, mathDuelGames = {}, wordCha
 const battleshipGames = {}, memoryGames = {}, holGames = {}, dicePokerGames = {}, scrambleGames = {}, emojiDecodeGames = {};
 // New games (batch 3)
 const fastTypeGames = {}, countdownGames = {}, truthDareGames = {};
+// Team games
+const teamTriviaGames = {};
 
 // ─── TTT Helpers ──────────────────────────────────────────────────────────────
 const TTT_WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
@@ -1106,8 +1108,149 @@ function buildMurderMysteryEmbed(g, phase) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ─── WORD BOMB (Multiplayer, fast-paced, any number of players) ──────────────
+// ─── TEAM TRIVIA (up to 4 teams, button-based team selection) ────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
+
+const TT_TEAMS = [
+  { id: 'red',    label: '🔴 Team Red',    color: '#E74C3C', emoji: '🔴' },
+  { id: 'blue',   label: '🔵 Team Blue',   color: '#3498DB', emoji: '🔵' },
+  { id: 'green',  label: '🟢 Team Green',  color: '#2ECC71', emoji: '🟢' },
+  { id: 'yellow', label: '🟡 Team Yellow', color: '#F1C40F', emoji: '🟡' },
+];
+
+const TT_QUESTIONS = [
+  // Science
+  {q:'What planet is known as the Red Planet?', a:1, c:['Venus','Mars','Jupiter','Saturn'], cat:'🔬 Science'},
+  {q:'How many bones are in the adult human body?', a:2, c:['186','196','206','216'], cat:'🔬 Science'},
+  {q:'What gas do plants absorb from the atmosphere?', a:0, c:['Carbon Dioxide','Oxygen','Nitrogen','Helium'], cat:'🔬 Science'},
+  {q:'What is the chemical symbol for Gold?', a:1, c:['Gd','Au','Ag','Go'], cat:'🔬 Science'},
+  {q:'What is the speed of light (approx, km/s)?', a:2, c:['150,000','200,000','300,000','400,000'], cat:'🔬 Science'},
+  {q:'What is the powerhouse of the cell?', a:0, c:['Mitochondria','Nucleus','Ribosome','Vacuole'], cat:'🔬 Science'},
+  {q:'How many elements are on the periodic table?', a:3, c:['108','112','116','118'], cat:'🔬 Science'},
+  {q:'What planet has the most moons?', a:1, c:['Jupiter','Saturn','Uranus','Neptune'], cat:'🔬 Science'},
+  // Geography
+  {q:'What is the capital of Australia?', a:2, c:['Sydney','Melbourne','Canberra','Brisbane'], cat:'🌍 Geography'},
+  {q:'Which country has the most natural lakes?', a:0, c:['Canada','Russia','USA','Brazil'], cat:'🌍 Geography'},
+  {q:'What is the longest river in the world?', a:1, c:['Amazon','Nile','Yangtze','Mississippi'], cat:'🌍 Geography'},
+  {q:'Which continent has the most countries?', a:0, c:['Africa','Asia','Europe','South America'], cat:'🌍 Geography'},
+  {q:'What is the smallest country in the world?', a:2, c:['Monaco','Nauru','Vatican City','San Marino'], cat:'🌍 Geography'},
+  {q:'Which ocean is the largest?', a:0, c:['Pacific','Atlantic','Indian','Arctic'], cat:'🌍 Geography'},
+  {q:'What is the capital of Japan?', a:1, c:['Osaka','Tokyo','Kyoto','Hiroshima'], cat:'🌍 Geography'},
+  // History
+  {q:'In what year did World War II end?', a:2, c:['1943','1944','1945','1946'], cat:'📜 History'},
+  {q:'Who was the first person to walk on the Moon?', a:0, c:['Neil Armstrong','Buzz Aldrin','Yuri Gagarin','John Glenn'], cat:'📜 History'},
+  {q:'Which empire was the largest in history?', a:1, c:['Roman Empire','British Empire','Mongol Empire','Ottoman Empire'], cat:'📜 History'},
+  {q:'In what year did the Berlin Wall fall?', a:2, c:['1987','1988','1989','1990'], cat:'📜 History'},
+  {q:'Who painted the Mona Lisa?', a:0, c:['Leonardo da Vinci','Michelangelo','Raphael','Botticelli'], cat:'📜 History'},
+  // Pop Culture & Entertainment
+  {q:'How many strings does a standard guitar have?', a:1, c:['4','6','7','8'], cat:'🎭 Pop Culture'},
+  {q:'What movie features the quote "I\'ll be back"?', a:2, c:['RoboCop','Die Hard','The Terminator','Predator'], cat:'🎭 Pop Culture'},
+  {q:'Which band wrote "Bohemian Rhapsody"?', a:0, c:['Queen','The Beatles','Led Zeppelin','Rolling Stones'], cat:'🎭 Pop Culture'},
+  {q:'How many Harry Potter books are there?', a:1, c:['6','7','8','9'], cat:'🎭 Pop Culture'},
+  {q:'What sport is played at Wimbledon?', a:0, c:['Tennis','Cricket','Badminton','Squash'], cat:'🎭 Pop Culture'},
+  // Math & Logic
+  {q:'What is 17 × 13?', a:2, c:['199','213','221','231'], cat:'🧮 Math'},
+  {q:'What is the square root of 144?', a:1, c:['11','12','13','14'], cat:'🧮 Math'},
+  {q:'How many sides does a heptagon have?', a:2, c:['5','6','7','8'], cat:'🧮 Math'},
+  {q:'What is 15% of 200?', a:0, c:['30','25','35','20'], cat:'🧮 Math'},
+  {q:'What is the next prime after 23?', a:1, c:['25','29','27','31'], cat:'🧮 Math'},
+  // Technology
+  {q:'What does "HTTP" stand for?', a:0, c:['HyperText Transfer Protocol','High Transfer Text Protocol','Hyper Terminal Text Processing','Host Transfer Protocol'], cat:'💻 Technology'},
+  {q:'Which company created the Java programming language?', a:1, c:['Microsoft','Sun Microsystems','IBM','Apple'], cat:'💻 Technology'},
+  {q:'How many bits are in a byte?', a:2, c:['4','6','8','16'], cat:'💻 Technology'},
+  {q:'What does "CPU" stand for?', a:0, c:['Central Processing Unit','Core Processor Unit','Computer Power Unit','Central Power Utility'], cat:'💻 Technology'},
+  {q:'Which social media platform uses a bird as its logo?', a:1, c:['Instagram','Twitter/X','Snapchat','TikTok'], cat:'💻 Technology'},
+  // Food & Nature
+  {q:'What is the most consumed fruit in the world?', a:0, c:['Tomato','Banana','Apple','Mango'], cat:'🍕 Food & Nature'},
+  {q:'How many legs does a spider have?', a:2, c:['6','7','8','10'], cat:'🍕 Food & Nature'},
+  {q:'What is the largest land animal?', a:0, c:['African Elephant','White Rhino','Giraffe','Hippopotamus'], cat:'🍕 Food & Nature'},
+  {q:'Which country is the largest producer of coffee?', a:1, c:['Colombia','Brazil','Ethiopia','Vietnam'], cat:'🍕 Food & Nature'},
+  {q:'How many hearts does an octopus have?', a:2, c:['1','2','3','4'], cat:'🍕 Food & Nature'},
+];
+
+function shuffleTTQuestions(numQ) {
+  const q = [...TT_QUESTIONS].sort(() => Math.random() - 0.5);
+  return q.slice(0, Math.min(numQ, q.length));
+}
+
+function buildTTLobbyEmbed(g) {
+  const teamLines = TT_TEAMS.filter(t => g.numTeams === 4 || ['red','blue','green','yellow'].slice(0,g.numTeams).includes(t.id))
+    .map(t => {
+      const members = g.teams[t.id] || [];
+      return `${t.emoji} **${t.label}** (${members.length} player${members.length!==1?'s':''})\n${members.length ? members.map(id=>`> <@${id}>`).join('\n') : '> *No players yet*'}`;
+    });
+  return new EmbedBuilder()
+    .setColor('#9B59B6')
+    .setTitle('🏆 Team Trivia — Lobby')
+    .setDescription(
+      `**Host:** <@${g.host}> | **${g.numTeams} teams** | **${g.totalQ} questions**\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      teamLines.join('\n\n') +
+      `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `👇 **Click your team button to join!**\nWhen everyone is ready, the host types \`!ttstart\` to begin.`
+    )
+    .setFooter({ text: `Min 2 players total across at least 2 teams • Host: !ttstart to begin • !ttcancel to cancel` })
+    .setTimestamp();
+}
+
+function buildTTTeamRows(g) {
+  const activeTeams = TT_TEAMS.filter(t => ['red','blue','green','yellow'].slice(0,g.numTeams).includes(t.id));
+  const styles = { red: ButtonStyle.Danger, blue: ButtonStyle.Primary, green: ButtonStyle.Success, yellow: ButtonStyle.Secondary };
+  const row = new ActionRowBuilder();
+  activeTeams.forEach(t => row.addComponents(
+    new ButtonBuilder().setCustomId(`tt:join:${t.id}`).setLabel(t.label).setStyle(styles[t.id])
+  ));
+  row.addComponents(new ButtonBuilder().setCustomId('tt:leave').setLabel('🚪 Leave').setStyle(ButtonStyle.Secondary));
+  return [row];
+}
+
+function buildTTQuestionEmbed(g) {
+  const q = g.questions[g.qIdx];
+  const activeTeams = TT_TEAMS.filter(t => ['red','blue','green','yellow'].slice(0,g.numTeams).includes(t.id));
+  const scoreLine = activeTeams.map(t => `${t.emoji} **${t.label.replace('Team ','')}:** ${g.scores[t.id] || 0} pts`).join(' | ');
+  return new EmbedBuilder()
+    .setColor('#9B59B6')
+    .setTitle(`🏆 Team Trivia — Q${g.qIdx + 1}/${g.totalQ}`)
+    .setDescription(
+      `📂 **Category:** ${q.cat}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `**${q.q}**\n\n` +
+      q.c.map((opt, i) => `${['🇦','🇧','🇨','🇩'][i]} ${opt}`).join('\n') +
+      `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `🎯 **Answering:** ${TT_TEAMS.find(t=>t.id===g.currentTeam)?.emoji} **${TT_TEAMS.find(t=>t.id===g.currentTeam)?.label}**\n\n` +
+      `📊 ${scoreLine}`
+    )
+    .setFooter({ text: `Only the answering team can respond • +2 pts correct, -0 pts wrong • Other teams +1 pt if they steal!` })
+    .setTimestamp();
+}
+
+function buildTTAnswerRows(g, disabled = false) {
+  const labels = ['🇦 A', '🇧 B', '🇨 C', '🇩 D'];
+  return [new ActionRowBuilder().addComponents(
+    ...['0','1','2','3'].map((i) =>
+      new ButtonBuilder().setCustomId(`tt:ans:${i}`).setLabel(labels[i]).setStyle(ButtonStyle.Primary).setDisabled(disabled)
+    )
+  )];
+}
+
+function buildTTFinalEmbed(g) {
+  const activeTeams = TT_TEAMS.filter(t => ['red','blue','green','yellow'].slice(0,g.numTeams).includes(t.id));
+  const sorted = [...activeTeams].sort((a,b) => (g.scores[b.id]||0) - (g.scores[a.id]||0));
+  const medals = ['🥇','🥈','🥉','🏅'];
+  const podium = sorted.map((t, i) => {
+    const members = (g.teams[t.id]||[]).map(id=>`<@${id}>`).join(', ') || '*No players*';
+    return `${medals[i]} ${t.emoji} **${t.label}** — **${g.scores[t.id]||0} pts**\n> Players: ${members}`;
+  }).join('\n\n');
+  const mvpEntries = Object.entries(g.playerCorrect||{}).sort(([,a],[,b])=>b-a);
+  const mvp = mvpEntries[0] ? `\n\n🌟 **MVP:** <@${mvpEntries[0][0]}> (${mvpEntries[0][1]} correct)` : '';
+  return new EmbedBuilder()
+    .setColor('#FFD700')
+    .setTitle('🏆 Team Trivia — Final Results!')
+    .setDescription(
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${podium}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━${mvp}`
+    )
+    .setTimestamp();
+}
 const wordBombGames = {};
 const WB_PROMPTS = [
   'IN','AN','OR','ER','ST','OU','TR','PL','GR','FR','CH','SH','TH','BL','CR',
@@ -1301,6 +1444,125 @@ client.on('interactionCreate', async (interaction) => {
         .setFooter({ text: `Round ${g.round} • ${g.players.length} player(s) • Use !stopgame to end` })
         .setTimestamp()
     ], components: [row] });
+  }
+
+  // Team Trivia buttons
+  if (interaction.isButton() && interaction.customId.startsWith('tt:')) {
+    const parts = interaction.customId.split(':');
+    const action = parts[1];
+    const cid = interaction.channel.id;
+    const uid = interaction.user.id;
+
+    // Join team
+    if (action === 'join') {
+      const teamId = parts[2];
+      const g = teamTriviaGames[cid];
+      if (!g || g.phase !== 'lobby') return interaction.reply({ content: '❌ No Team Trivia lobby open here.', ephemeral: true });
+      // Remove from any existing team
+      for (const t of Object.values(g.teams)) { const idx = t.indexOf(uid); if (idx !== -1) t.splice(idx, 1); }
+      g.teams[teamId].push(uid);
+      return interaction.update({ embeds: [buildTTLobbyEmbed(g)], components: buildTTTeamRows(g) });
+    }
+
+    // Leave
+    if (action === 'leave') {
+      const g = teamTriviaGames[cid];
+      if (!g || g.phase !== 'lobby') return interaction.reply({ content: '❌ No active lobby.', ephemeral: true });
+      for (const t of Object.values(g.teams)) { const idx = t.indexOf(uid); if (idx !== -1) t.splice(idx, 1); }
+      return interaction.update({ embeds: [buildTTLobbyEmbed(g)], components: buildTTTeamRows(g) });
+    }
+
+    // Answer
+    if (action === 'ans') {
+      const g = teamTriviaGames[cid];
+      if (!g || g.phase !== 'question') return interaction.reply({ content: '❌ No question active.', ephemeral: true });
+      const q = g.questions[g.qIdx];
+      const chosen = parseInt(parts[2]);
+
+      // Determine which team this player is on
+      const activeTeamIds = ['red','blue','green','yellow'].slice(0,g.numTeams);
+      const playerTeam = activeTeamIds.find(tid => (g.teams[tid]||[]).includes(uid));
+      if (!playerTeam) return interaction.reply({ content: '❌ You are not in any team!', ephemeral: true });
+
+      const isAnsweringTeam = playerTeam === g.currentTeam;
+      const alreadyAnswered = g.answered.has(uid);
+      if (alreadyAnswered) return interaction.reply({ content: '❌ You already answered this question!', ephemeral: true });
+
+      // If a member of the answering team already locked in an answer, block others on same team
+      if (isAnsweringTeam && g.teamAnswered.has(playerTeam)) return interaction.reply({ content: '❌ Your team already answered!', ephemeral: true });
+      // Other teams can steal only after the main team answered wrong
+      if (!isAnsweringTeam && !g.mainTeamAnsweredWrong) return interaction.reply({ content: `❌ Wait! It's ${TT_TEAMS.find(t=>t.id===g.currentTeam)?.emoji} **${TT_TEAMS.find(t=>t.id===g.currentTeam)?.label}**'s turn to answer first!`, ephemeral: true });
+      if (!isAnsweringTeam && g.teamAnswered.has(playerTeam)) return interaction.reply({ content: '❌ Your team already tried to steal!', ephemeral: true });
+
+      g.answered.add(uid);
+      g.teamAnswered.add(playerTeam);
+      const correct = chosen === q.a;
+
+      if (correct) {
+        const pts = isAnsweringTeam ? 2 : 1; // steal = 1 pt
+        g.scores[playerTeam] = (g.scores[playerTeam] || 0) + pts;
+        g.playerCorrect = g.playerCorrect || {};
+        g.playerCorrect[uid] = (g.playerCorrect[uid] || 0) + 1;
+        g.phase = 'intermission';
+
+        const teamInfo = TT_TEAMS.find(t=>t.id===playerTeam);
+        const correctOpt = q.c[q.a];
+        const resultEmbed = new EmbedBuilder()
+          .setColor(teamInfo.color)
+          .setTitle(`🏆 Team Trivia — ${isAnsweringTeam ? '✅ Correct!' : '⚡ Steal!'}`)
+          .setDescription(
+            `${teamInfo.emoji} **${teamInfo.label}** answered correctly!\n` +
+            (isAnsweringTeam ? '' : `🔥 **STEAL!** +1 point\n`) +
+            `<@${uid}> got it right!\n\n` +
+            `✅ **Answer:** ${correctOpt}\n\n` +
+            `**+${pts} point${pts>1?'s':''} for ${teamInfo.label}!** ${teamInfo.emoji}\n\n` +
+            `📊 Scores: ${['red','blue','green','yellow'].slice(0,g.numTeams).map(tid=>{ const ti=TT_TEAMS.find(t=>t.id===tid); return `${ti.emoji} ${g.scores[tid]||0}`; }).join(' | ')}\n\n` +
+            `*Next question in 4 seconds...*`
+          ).setTimestamp();
+
+        await interaction.update({ embeds: [resultEmbed], components: buildTTAnswerRows(g, true) });
+
+        // Advance
+        setTimeout(async () => {
+          if (!teamTriviaGames[cid]) return;
+          g.qIdx++;
+          if (g.qIdx >= g.totalQ) {
+            g.phase = 'finished';
+            delete teamTriviaGames[cid];
+            return interaction.channel.send({ embeds: [buildTTFinalEmbed(g)] }).catch(()=>{});
+          }
+          // Next team's turn (rotate)
+          const teamOrder = ['red','blue','green','yellow'].slice(0,g.numTeams);
+          g.currentTeam = teamOrder[(teamOrder.indexOf(g.currentTeam) + 1) % teamOrder.length];
+          g.answered = new Set();
+          g.teamAnswered = new Set();
+          g.mainTeamAnsweredWrong = false;
+          g.phase = 'question';
+          interaction.channel.send({ embeds: [buildTTQuestionEmbed(g)], components: buildTTAnswerRows(g, false) }).catch(()=>{});
+        }, 4000);
+        return;
+      }
+
+      // Wrong answer
+      if (isAnsweringTeam) {
+        g.mainTeamAnsweredWrong = true;
+        const teamInfo = TT_TEAMS.find(t=>t.id===playerTeam);
+        const wrongEmbed = new EmbedBuilder()
+          .setColor('#ED4245')
+          .setTitle('❌ Wrong!')
+          .setDescription(
+            `${teamInfo.emoji} **${teamInfo.label}** answered wrong!\n<@${uid}> chose: **${q.c[chosen]}**\n\n` +
+            `⚡ **Other teams can now steal by clicking the correct answer!**\n\n` +
+            `📊 Scores: ${['red','blue','green','yellow'].slice(0,g.numTeams).map(tid=>{ const ti=TT_TEAMS.find(t=>t.id===tid); return `${ti.emoji} ${g.scores[tid]||0}`; }).join(' | ')}`
+          ).setTimestamp();
+        return interaction.update({ embeds: [wrongEmbed], components: buildTTAnswerRows(g, false) });
+      }
+
+      // Wrong steal attempt
+      const teamInfo = TT_TEAMS.find(t=>t.id===playerTeam);
+      return interaction.reply({ content: `❌ ${teamInfo.emoji} **${teamInfo.label}** tried to steal — wrong answer! (**${q.c[chosen]}**)`, ephemeral: false });
+    }
+    return;
   }
 
   // Mines
@@ -2269,7 +2531,7 @@ client.on('messageCreate', async (message) => {
           {name:'📩 DM',         value:`\`dm\` \`dmall\` \`announce\`\n> \`!dm @user1 @user2 message\` — DM multiple users (rate-limited)`},
           {name:'😂 Fun',        value:`\`meme\` \`joke\` \`8ball\` \`ship\` \`fight\` \`slap\` \`hug\` \`kiss\` \`pat\` \`coinflip\` \`roll\` \`gay\` \`iq\` \`rizz\` \`aura\` \`simp\` \`drip\` \`sus\``},
           {name:'🎮 Games (Solo)',value:`\`blackjack\` \`slots\` \`mines\` \`snake\` \`2048\` \`memory\` \`hol\` \`dicepoker\`\n> \`wordle\` \`hangman\` \`trivia\` \`guess\` \`scramble\` \`emojidecode\` (anyone can join!)`},
-          {name:'⚔️ Multiplayer Games',value:`\`ttt @user\` \`connect4 @user\` \`rps @user\` \`battleship @user\`\n> \`mathduel @user\` \`wordchain @user\` \`triviabattle @user\`\n> \`poker @user\` \`wordbomb @u1 @u2...\` \`murdermystery @u1 @u2...\`\n> \`fasttype\` \`truthordare [@u1 @u2...]\` \`quizshowdown\` \`triviamarathon\`\n> \`rps rock/paper/scissors\` — vs bot`},
+          {name:'⚔️ Multiplayer Games',value:`\`ttt @user\` \`connect4 @user\` \`rps @user\` \`battleship @user\`\n> \`mathduel @user\` \`wordchain @user\` \`triviabattle @user\`\n> \`poker @user\` \`wordbomb @u1 @u2...\` \`murdermystery @u1 @u2...\`\n> \`fasttype\` \`truthordare [@u1 @u2...]\` \`quizshowdown\` \`triviamarathon\`\n> \`rps rock/paper/scissors\` — vs bot\n> \`teamtrivia [2-4] [3-20]\` — **Team Trivia** (button team select!)`},
           {name:'🛑 Game Control',value:`\`stopgame\` — Stop all active games in channel (Mod only)`},
           {name:'🎫 Tickets',    value:`\`ticket\` \`ticketset\` \`ticketreset\``},
           {name:'🎉 Welcome',    value:`\`welcomeset\` \`welcometest\``},
@@ -3335,6 +3597,79 @@ client.on('messageCreate', async (message) => {
       break;
     }
 
+    // ── TEAM TRIVIA ──────────────────────────────────────────────────────────
+    case 'teamtrivia': case 'tt': {
+      if (teamTriviaGames[message.channel.id]) return message.reply('❌ A Team Trivia game is already running here! Use `!ttcancel` to cancel it.');
+      const numTeams = Math.min(4, Math.max(2, parseInt(args[0]) || 2));
+      const totalQ   = Math.min(20, Math.max(3,  parseInt(args[1]) || 10));
+      const activeTeamIds = ['red','blue','green','yellow'].slice(0, numTeams);
+      const teams = {};
+      activeTeamIds.forEach(id => { teams[id] = []; });
+      const scores = {};
+      activeTeamIds.forEach(id => { scores[id] = 0; });
+      const g = {
+        host: message.author.id,
+        phase: 'lobby',
+        numTeams, totalQ,
+        teams, scores,
+        questions: shuffleTTQuestions(totalQ),
+        qIdx: 0,
+        currentTeam: activeTeamIds[0],
+        answered: new Set(),
+        teamAnswered: new Set(),
+        mainTeamAnsweredWrong: false,
+        playerCorrect: {},
+      };
+      teamTriviaGames[message.channel.id] = g;
+      await message.reply({
+        embeds: [buildTTLobbyEmbed(g)],
+        components: buildTTTeamRows(g),
+      });
+      break;
+    }
+
+    case 'ttstart': {
+      const g = teamTriviaGames[message.channel.id];
+      if (!g) return message.reply('❌ No Team Trivia lobby here. Start one with `!teamtrivia [2-4 teams] [3-20 questions]`');
+      if (g.phase !== 'lobby') return message.reply('❌ Game already started!');
+      if (message.author.id !== g.host) return message.reply('❌ Only the host can start the game!');
+      const activeTeamIds = ['red','blue','green','yellow'].slice(0, g.numTeams);
+      const teamsWithPlayers = activeTeamIds.filter(id => g.teams[id].length > 0);
+      if (teamsWithPlayers.length < 2) return message.reply('❌ At least **2 teams** must have players before starting!');
+      const totalPlayers = activeTeamIds.reduce((sum, id) => sum + g.teams[id].length, 0);
+      if (totalPlayers < 2) return message.reply('❌ Need at least **2 players** to start!');
+      g.phase = 'question';
+      // Remove empty teams from rotation
+      g.numTeams = teamsWithPlayers.length;
+      g.currentTeam = teamsWithPlayers[0];
+      await message.reply({
+        embeds: [new EmbedBuilder().setColor('#9B59B6').setTitle('🏆 Team Trivia — Starting!')
+          .setDescription(
+            `Game begins now! **${g.totalQ} questions**, **${teamsWithPlayers.length} teams**!\n\n` +
+            teamsWithPlayers.map(tid => { const t = TT_TEAMS.find(x=>x.id===tid); return `${t.emoji} **${t.label}:** ${g.teams[tid].map(id=>`<@${id}>`).join(', ')}`; }).join('\n') +
+            `\n\n📋 **Rules:**\n• Answering team gets **+2 pts** for correct answer\n• Wrong answer → other teams can **steal for +1 pt**!\n• First player on the answering team to click locks in the team's answer\n• Questions rotate between teams\n\n*First question in 3 seconds...*`
+          ).setTimestamp()],
+        components: [],
+      });
+      await sleep(3000);
+      if (!teamTriviaGames[message.channel.id]) return;
+      g.answered = new Set();
+      g.teamAnswered = new Set();
+      g.mainTeamAnsweredWrong = false;
+      message.channel.send({ embeds: [buildTTQuestionEmbed(g)], components: buildTTAnswerRows(g, false) }).catch(()=>{});
+      break;
+    }
+
+    case 'ttcancel': {
+      const g = teamTriviaGames[message.channel.id];
+      if (!g) return message.reply('❌ No Team Trivia game running here.');
+      if (message.author.id !== g.host && !message.member.permissions.has(PermissionFlagsBits.ManageMessages))
+        return message.reply('❌ Only the host or a moderator can cancel the game.');
+      delete teamTriviaGames[message.channel.id];
+      message.reply({ embeds: [successEmbed('🏆 Team Trivia Cancelled', `Game cancelled by <@${message.author.id}>.`)] });
+      break;
+    }
+
     case 'stopgame': case 'endgame': {
       if(!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return missingPerm(message,'Manage Messages');
       const cid = message.channel.id;
@@ -3358,6 +3693,7 @@ client.on('messageCreate', async (message) => {
       if(quizShowdownGames[cid]){delete quizShowdownGames[cid];stopped=true;}
       if(wordBombGames[cid]){delete wordBombGames[cid];stopped=true;}
       if(murderGames[cid]){delete murderGames[cid];stopped=true;}
+      if(teamTriviaGames[cid]){delete teamTriviaGames[cid];stopped=true;}
       if(bjGames[uid]){delete bjGames[uid];stopped=true;}
       if(minesGames[uid]){delete minesGames[uid];stopped=true;}
       if(snakeGames[uid]){delete snakeGames[uid];stopped=true;}
