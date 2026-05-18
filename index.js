@@ -1873,6 +1873,10 @@ client.on('interactionCreate', async (interaction) => {
     const pIdx = g.players.findIndex(p=>p.id===uid);
     if (pIdx === -1) return interaction.reply({content:'❌ You are not in this game.',ephemeral:true});
     if (g.currentTurn !== uid) return interaction.reply({content:'❌ Not your turn!',ephemeral:true});
+
+    // Defer immediately so Discord doesn't time out while we await DM sends
+    await interaction.deferUpdate();
+
     const p = g.players[pIdx];
     const opp = g.players[1-pIdx];
     const toCall = Math.max(0, opp.bet - p.bet);
@@ -1886,7 +1890,7 @@ client.on('interactionCreate', async (interaction) => {
       if (g.round > 10 || p.chips <= 0 || opp.chips <= 0) {
         const winner = opp.chips >= p.chips ? opp : p;
         delete pokerGames[interaction.channel.id];
-        return interaction.update({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🃏 Poker — Game Over!')
+        return interaction.editReply({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🃏 Poker — Game Over!')
           .setDescription(`<@${p.id}> folded.\n\n🏆 **<@${winner.id}> WINS THE MATCH!**\n<@${opp.id}>: **${opp.chips}** chips\n<@${p.id}>: **${p.chips}** chips`)
           .setTimestamp()],components:[]});
       }
@@ -1903,7 +1907,7 @@ client.on('interactionCreate', async (interaction) => {
       const handMsg = `✅ <@${p.id}> folded! <@${opp.id}> wins **${winAmt}** chips!\n\n**New Round ${g.round}/10** | Your hole cards (check DMs!)`;
       try { await interaction.user.send(`🃏 **Your hole cards (Round ${g.round}):** ${pokerHandStr(p.hand)}`); } catch{}
       try { await interaction.guild.members.fetch(opp.id).then(m=>m.user.send(`🃏 **Your hole cards (Round ${g.round}):** ${pokerHandStr(opp.hand)}`)).catch(()=>{}); } catch{}
-      return interaction.update({embeds:[buildPokerEmbed(g).setDescription(`${handMsg}`)],components:buildPokerActionRows(false)});
+      return interaction.editReply({embeds:[buildPokerEmbed(g).setDescription(`${handMsg}`)],components:buildPokerActionRows(false)});
     }
 
     if (act === 'call') {
@@ -1934,7 +1938,7 @@ client.on('interactionCreate', async (interaction) => {
           if (g.round > 10 || g.players[0].chips <= 0 || g.players[1].chips <= 0) {
             const finalW = g.players[0].chips >= g.players[1].chips ? g.players[0] : g.players[1];
             delete pokerGames[interaction.channel.id];
-            return interaction.update({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🃏 Poker — Showdown!')
+            return interaction.editReply({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🃏 Poker — Showdown!')
               .setDescription(`**Community:** ${pokerHandStr(g.communityCards)}\n**<@${g.players[0].id}>:** ${pokerHandStr(g.players[0].hand)} → ${p1hand.name}\n**<@${g.players[1].id}>:** ${pokerHandStr(g.players[1].hand)} → ${p2hand.name}\n\n${resultDesc}\n\n🏆 **<@${finalW.id}> WINS THE MATCH!**`)
               .setTimestamp()],components:[]});
           }
@@ -1950,12 +1954,12 @@ client.on('interactionCreate', async (interaction) => {
           if(g.players[1].chips===0) g.players[1].allIn=true;
           try{await interaction.user.send(`🃏 **Hole cards R${g.round}:** ${pokerHandStr(g.players[0].hand)}`);}catch{}
           try{await interaction.guild.members.fetch(g.players[1].id).then(m=>m.user.send(`🃏 **Hole cards R${g.round}:** ${pokerHandStr(g.players[1].hand)}`)).catch(()=>{});}catch{}
-          return interaction.update({embeds:[new EmbedBuilder().setColor('#1A472A').setTitle(`🃏 Poker — Round ${g.round}/10`)
+          return interaction.editReply({embeds:[new EmbedBuilder().setColor('#1A472A').setTitle(`🃏 Poker — Round ${g.round}/10`)
             .setDescription(`**Showdown Results:**\n${resultDesc}\n\n**New Round — Community cards:** *Pre-flop*\n<@${g.players[0].id}>: **${g.players[0].chips}** chips | <@${g.players[1].id}>: **${g.players[1].chips}** chips`)
             .setTimestamp()],components:buildPokerActionRows(false)});
         }
         g.currentTurn = opp.id;
-        return interaction.update({embeds:[buildPokerEmbed(g)],components:buildPokerActionRows(false)});
+        return interaction.editReply({embeds:[buildPokerEmbed(g)],components:buildPokerActionRows(false)});
       }
       // Call
       const callAmt = Math.min(toCall, p.chips);
@@ -1984,7 +1988,7 @@ client.on('interactionCreate', async (interaction) => {
         if (g.round > 10 || g.players[0].chips <= 0 || g.players[1].chips <= 0) {
           const finalW = g.players[0].chips >= g.players[1].chips ? g.players[0] : g.players[1];
           delete pokerGames[interaction.channel.id];
-          return interaction.update({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🃏 Poker — Showdown!')
+          return interaction.editReply({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🃏 Poker — Showdown!')
             .setDescription(`**Community:** ${pokerHandStr(g.communityCards)}\n**<@${g.players[0].id}>:** ${pokerHandStr(g.players[0].hand)} → ${p1hand.name}\n**<@${g.players[1].id}>:** ${pokerHandStr(g.players[1].hand)} → ${p2hand.name}\n\n${resultDesc}\n\n🏆 **<@${finalW.id}> WINS THE MATCH!**`)
             .setTimestamp()],components:[]});
         }
@@ -1999,12 +2003,12 @@ client.on('interactionCreate', async (interaction) => {
         if(g.players[1].chips===0) g.players[1].allIn=true;
         try{await interaction.user.send(`🃏 **Hole cards R${g.round}:** ${pokerHandStr(g.players[0].hand)}`);}catch{}
         try{await interaction.guild.members.fetch(g.players[1].id).then(m=>m.user.send(`🃏 **Hole cards R${g.round}:** ${pokerHandStr(g.players[1].hand)}`)).catch(()=>{});}catch{}
-        return interaction.update({embeds:[new EmbedBuilder().setColor('#1A472A').setTitle(`🃏 Poker — Round ${g.round}/10`)
+        return interaction.editReply({embeds:[new EmbedBuilder().setColor('#1A472A').setTitle(`🃏 Poker — Round ${g.round}/10`)
           .setDescription(`**Showdown Results:**\n${resultDesc}\n\n**New Round — Community cards:** *Pre-flop*\n<@${g.players[0].id}>: **${g.players[0].chips}** chips | <@${g.players[1].id}>: **${g.players[1].chips}** chips`)
           .setTimestamp()],components:buildPokerActionRows(false)});
       }
       g.currentTurn = opp.id;
-      return interaction.update({embeds:[buildPokerEmbed(g)],components:buildPokerActionRows(false)});
+      return interaction.editReply({embeds:[buildPokerEmbed(g)],components:buildPokerActionRows(false)});
     }
 
     if (act === 'raise') {
@@ -2012,13 +2016,13 @@ client.on('interactionCreate', async (interaction) => {
       p.chips -= raiseAmt; p.bet += raiseAmt;
       if (p.chips === 0) p.allIn = true;
       g.currentTurn = opp.id;
-      return interaction.update({embeds:[buildPokerEmbed(g)],components:buildPokerActionRows(false)});
+      return interaction.editReply({embeds:[buildPokerEmbed(g)],components:buildPokerActionRows(false)});
     }
 
     if (act === 'allin') {
       p.bet += p.chips; p.chips = 0; p.allIn = true;
       g.currentTurn = opp.id;
-      return interaction.update({embeds:[buildPokerEmbed(g)],components:buildPokerActionRows(false)});
+      return interaction.editReply({embeds:[buildPokerEmbed(g)],components:buildPokerActionRows(false)});
     }
   }
 });
