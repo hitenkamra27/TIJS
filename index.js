@@ -2325,31 +2325,32 @@ client.on('messageCreate', async (message) => {
   const bsGame = battleshipGames[message.channel.id];
   if (bsGame && message.author.id===bsGame.currentTurn && !message.content.startsWith(PREFIX)) {
     const coord = parseBSCoord(message.content);
-    if (!coord) return;
-    const [r,c]=coord;
-    const isP1=message.author.id===bsGame.p1;
-    const shots=isP1?bsGame.shots1:bsGame.shots2;
-    const targetBoard=isP1?bsGame.board2:bsGame.board1;
-    const targetShips=isP1?bsGame.ships2:bsGame.ships1;
-    if (shots.some(s=>s[0]===r&&s[1]===c)) return message.reply('❌ Already shot there! Pick another coordinate.');
-    shots.push([r,c]);
-    const hit=targetBoard[r][c]===1;
-    let sunkMsg='';
-    if (hit) {
-      const ship=targetShips.find(s=>s.cells.some(([sr,sc])=>sr===r&&sc===c));
-      if(ship){ship.hits++;if(ship.hits>=ship.len)sunkMsg=`\n\n💥 **${ship.name} SUNK!** ☠️`;}
-    }
-    const allSunk=targetShips.every(s=>s.hits>=s.len);
-    if (allSunk) {
-      delete battleshipGames[message.channel.id];
-      return message.reply({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🚢 Battleship — WINNER! 🏆')
-        .setDescription(`🎯 **${message.author.username}** sinks the last ship!\n\n<@${message.author.id}> **WINS THE BATTLE!** ⚓\n\n${renderBSGrid(targetBoard,shots,true)}`)
+    if (coord) {
+      const [r,c]=coord;
+      const isP1=message.author.id===bsGame.p1;
+      const shots=isP1?bsGame.shots1:bsGame.shots2;
+      const targetBoard=isP1?bsGame.board2:bsGame.board1;
+      const targetShips=isP1?bsGame.ships2:bsGame.ships1;
+      if (shots.some(s=>s[0]===r&&s[1]===c)) return message.reply('❌ Already shot there! Pick another coordinate.');
+      shots.push([r,c]);
+      const hit=targetBoard[r][c]===1;
+      let sunkMsg='';
+      if (hit) {
+        const ship=targetShips.find(s=>s.cells.some(([sr,sc])=>sr===r&&sc===c));
+        if(ship){ship.hits++;if(ship.hits>=ship.len)sunkMsg=`\n\n💥 **${ship.name} SUNK!** ☠️`;}
+      }
+      const allSunk=targetShips.every(s=>s.hits>=s.len);
+      if (allSunk) {
+        delete battleshipGames[message.channel.id];
+        return message.reply({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🚢 Battleship — WINNER! 🏆')
+          .setDescription(`🎯 **${message.author.username}** sinks the last ship!\n\n<@${message.author.id}> **WINS THE BATTLE!** ⚓\n\n${renderBSGrid(targetBoard,shots,true)}`)
+          .setTimestamp()]});
+      }
+      bsGame.currentTurn=bsGame.currentTurn===bsGame.p1?bsGame.p2:bsGame.p1;
+      return message.reply({embeds:[new EmbedBuilder().setColor(hit?'#E74C3C':'#3498DB').setTitle(`🚢 Battleship — ${hit?'💥 HIT!':'〰️ Miss!'}`)
+        .setDescription(`**${message.author.username}** fires at **${message.content.trim().toUpperCase()}** — ${hit?'💥 HIT!':'〰️ Miss!'}${sunkMsg}\n\n${renderBSGrid(targetBoard,shots)}\n\n<@${bsGame.currentTurn}>'s turn! Type a coordinate (e.g. \`A1\`)`)
         .setTimestamp()]});
     }
-    bsGame.currentTurn=bsGame.currentTurn===bsGame.p1?bsGame.p2:bsGame.p1;
-    return message.reply({embeds:[new EmbedBuilder().setColor(hit?'#E74C3C':'#3498DB').setTitle(`🚢 Battleship — ${hit?'💥 HIT!':'〰️ Miss!'}`)
-      .setDescription(`**${message.author.username}** fires at **${message.content.trim().toUpperCase()}** — ${hit?'💥 HIT!':'〰️ Miss!'}${sunkMsg}\n\n${renderBSGrid(targetBoard,shots)}\n\n<@${bsGame.currentTurn}>'s turn! Type a coordinate (e.g. \`A1\`)`)
-      .setTimestamp()]});
   }
 
   // Scramble answer
@@ -3276,12 +3277,17 @@ client.on('messageCreate', async (message) => {
       const ships1=placeBSShips(b1), ships2=placeBSShips(b2);
       const g={p1:message.author.id,p2:opp.id,board1:b1,board2:b2,ships1,ships2,shots1:[],shots2:[],currentTurn:message.author.id};
       battleshipGames[message.channel.id]=g;
-      const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#3498DB').setTitle('🚢 Battleship')
-        .setDescription(`⚓ **${message.author.username}** vs **${opp.user.username}**!\n\n📖 **How to play:**\n• **2 players** on a 5×5 grid (A–E columns, 1–5 rows)\n• Ships are placed automatically and secretly\n• Take turns typing coordinates like \`A1\`, \`C3\`, \`E5\`\n• 💥 = Hit, 〰️ = Miss, 🟦 = Unknown\n• **Sink all enemy ships** to win!\n• Ships: ${ships1.map(s=>s.name).join(', ')}\n\n*Deploying fleets...*`).setTimestamp()]});
-      await sleep(900);
-      await initMsg.edit({embeds:[new EmbedBuilder().setColor('#3498DB').setTitle('🚢 Battleship — Battle Begins! ⚓')
+      const battleEmbed = new EmbedBuilder().setColor('#3498DB').setTitle('🚢 Battleship — Battle Begins! ⚓')
         .setDescription(`<@${message.author.id}> vs <@${opp.id}>\n\n**Grid:** 5×5 (A–E columns, 1–5 rows)\n**Ships:** ${ships1.map(s=>s.name).join(', ')}\n\n<@${g.currentTurn}>'s turn! Type a coordinate like \`A1\`, \`C3\`, \`E5\`\n\n${renderBSGrid(b2,[])}`)
-        .setTimestamp()]});
+        .setTimestamp();
+      try {
+        const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#3498DB').setTitle('🚢 Battleship')
+          .setDescription(`⚓ **${message.author.username}** vs **${opp.user.username}**!\n\n• 5×5 grid (A–E columns, 1–5 rows)\n• Ships placed secretly — sink them all to win!\n• Type coordinates like \`A1\`, \`C3\`, \`E5\`\n• 💥 = Hit | 〰️ = Miss | 🟦 = Unknown\n• Ships: ${ships1.map(s=>s.name).join(', ')}\n\n*Deploying fleets...*`).setTimestamp()]});
+        await sleep(900);
+        await initMsg.edit({embeds:[battleEmbed]});
+      } catch {
+        await message.channel.send({embeds:[battleEmbed]});
+      }
       break;
     }
 
