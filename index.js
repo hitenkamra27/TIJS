@@ -2867,7 +2867,7 @@ client.on('messageCreate', async (message) => {
           { name: '🔨  Moderation', value: '`kick` `ban` `unban` `mute` `unmute`\n`warn` `warnings` `clearwarnings`\n`slowmode` `lock` `unlock` `purge` `purgeuser`', inline: true },
           { name: '📊  Info & Stats', value: '`userinfo` `serverinfo` `botinfo`\n`ping` `avatar` `roleinfo` `profile`', inline: true },
           { name: '\u200b', value: '\u200b', inline: false },
-          { name: '😂  Fun', value: '`meme` `joke` `8ball` `ship` `fight`\n`slap` `hug` `kiss` `pat` `coinflip`\n`roll` `gay` `iq` `rizz` `aura` `simp` `drip` `sus`', inline: true },
+          { name: '😂  Fun', value: '`meme` `joke` `8ball` `ship` `fight`\n`slap` `hug` `kiss` `pat` `coinflip`\n`roll` `gay` `iq` `rizz` `aura` `simp` `drip` `sus`\n`kill` `cringe` `cuddle` `love` `meow` `shoot`\n`cry` `laugh` `horny` `marry` `divorce` `hack`', inline: true },
           { name: '🛠️  Utility & Server', value: '`say` `embed` `poll`\n`dm` `dmall` `announce`\n`ticket` `ticketset` `ticketreset`\n`welcomeset` `welcometest`', inline: true },
           { name: '\u200b', value: '\u200b', inline: false },
           { name: '🎭  Status *(Owner only)*', value: '`addstatus` `removestatus` `liststatus` `clearstatus`', inline: true },
@@ -3368,6 +3368,147 @@ client.on('messageCreate', async (message) => {
     case 'simp': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'simp'); message.reply({embeds:[new EmbedBuilder().setColor('#FF69B4').setTitle('🥺 Simp Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'😭 Certified Simp!':v>=50?'😅 A bit simpy...':v>=30?'🤨 Borderline.':'😎 Not a simp.'}`) .setThumbnail(t.user.displayAvatarURL({forceStatic:false})).setTimestamp()]}); break; }
     case 'drip': { const t=message.mentions.members.first()||message.member,v=pct(t.id,'drip'); message.reply({embeds:[new EmbedBuilder().setColor('#00BFFF').setTitle('💧 Drip Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'🔥 Absolute drip!':v>=60?'😎 Nice drip!':v>=40?'👕 Basic.':'💀 No drip.'}`) .setThumbnail(t.user.displayAvatarURL({forceStatic:false})).setTimestamp()]}); break; }
     case 'sus':  { const t=message.mentions.members.first()||message.member,v=pct(t.id,'sus'); message.reply({embeds:[new EmbedBuilder().setColor('#ED4245').setTitle('🔴 Sus Meter').setDescription(`**${t.user.username}**\n\n\`${meterBar(v)}\` **${v}%**\n\n${v>=80?'📮 EJECTED!':v>=60?'🤨 Pretty sus...':v>=40?'🧐 Hmm...':'✅ Not sus.'}`) .setThumbnail(t.user.displayAvatarURL({forceStatic:false})).setTimestamp()]}); break; }
+
+    // ── GIF REACTION COMMANDS ────────────────────────────────────────────────
+
+    case 'kill': {
+      const t = message.mentions.users.first(); if (!t) return message.reply('❌ Mention someone to kill!');
+      try {
+        const res = await fetch('https://nekos.best/api/v2/shoot');
+        const gif = (await res.json()).results[0].url;
+        message.reply({ embeds: [new EmbedBuilder().setColor('#ED4245').setTitle('💀 Kill!').setDescription(`**${message.author.username}** killed **${t.username}**! RIP 💀`).setImage(gif).setTimestamp()] });
+      } catch { message.reply({ embeds: [new EmbedBuilder().setColor('#ED4245').setTitle('💀 Kill!').setDescription(`**${message.author.username}** killed **${t.username}**! RIP 💀`).setTimestamp()] }); }
+      break;
+    }
+
+    case 'cringe': {
+      const t = message.mentions.users.first();
+      const target = t ? `**${t.username}**` : 'that';
+      try {
+        const res = await fetch('https://nekos.best/api/v2/facepalm');
+        const gif = (await res.json()).results[0].url;
+        message.reply({ embeds: [new EmbedBuilder().setColor('#FEE75C').setTitle('😬 Cringe!').setDescription(`**${message.author.username}** finds ${target} absolutely cringe 😬`).setImage(gif).setTimestamp()] });
+      } catch { message.reply({ embeds: [new EmbedBuilder().setColor('#FEE75C').setTitle('😬 Cringe!').setDescription(`**${message.author.username}** finds ${target} absolutely cringe 😬`).setTimestamp()] }); }
+      break;
+    }
+
+    case 'cuddle': {
+      const t = message.mentions.users.first(); if (!t) return message.reply('❌ Mention someone to cuddle!');
+      try {
+        const res = await fetch('https://nekos.best/api/v2/cuddle');
+        const gif = (await res.json()).results[0].url;
+        message.reply({ embeds: [new EmbedBuilder().setColor('#FF69B4').setTitle('🤗 Cuddle!').setDescription(`**${message.author.username}** cuddles **${t.username}**! So warm 🥰`).setImage(gif).setTimestamp()] });
+      } catch { message.reply({ embeds: [new EmbedBuilder().setColor('#FF69B4').setTitle('🤗 Cuddle!').setDescription(`**${message.author.username}** cuddles **${t.username}**! So warm 🥰`).setTimestamp()] }); }
+      break;
+    }
+
+    case 'love': {
+      const t = message.mentions.users.first(); if (!t) return message.reply('❌ Mention someone to love!');
+      try {
+        const res = await fetch('https://nekos.best/api/v2/kiss');
+        const gif = (await res.json()).results[0].url;
+        message.reply({ embeds: [new EmbedBuilder().setColor('#FF69B4').setTitle('❤️ Love!').setDescription(`**${message.author.username}** loves **${t.username}**! 💖`).setImage(gif).setTimestamp()] });
+      } catch { message.reply({ embeds: [new EmbedBuilder().setColor('#FF69B4').setTitle('❤️ Love!').setDescription(`**${message.author.username}** loves **${t.username}**! 💖`).setTimestamp()] }); }
+      break;
+    }
+
+    case 'meow': {
+      try {
+        const res = await fetch('https://nekos.best/api/v2/neko');
+        const gif = (await res.json()).results[0].url;
+        message.reply({ embeds: [new EmbedBuilder().setColor('#FFB6C1').setTitle('🐱 Meow!').setDescription(`**${message.author.username}** is feeling catty today~ nya! 🐾`).setImage(gif).setTimestamp()] });
+      } catch { message.reply({ embeds: [new EmbedBuilder().setColor('#FFB6C1').setTitle('🐱 Meow!').setDescription(`**${message.author.username}** says meow! 🐾`).setTimestamp()] }); }
+      break;
+    }
+
+    case 'shoot': {
+      const t = message.mentions.users.first(); if (!t) return message.reply('❌ Mention someone to shoot!');
+      try {
+        const res = await fetch('https://nekos.best/api/v2/shoot');
+        const gif = (await res.json()).results[0].url;
+        message.reply({ embeds: [new EmbedBuilder().setColor('#ED4245').setTitle('🔫 Shoot!').setDescription(`**${message.author.username}** shoots **${t.username}**! BANG 💥`).setImage(gif).setTimestamp()] });
+      } catch { message.reply({ embeds: [new EmbedBuilder().setColor('#ED4245').setTitle('🔫 Shoot!').setDescription(`**${message.author.username}** shoots **${t.username}**! BANG 💥`).setTimestamp()] }); }
+      break;
+    }
+
+    case 'cry': {
+      try {
+        const res = await fetch('https://nekos.best/api/v2/cry');
+        const gif = (await res.json()).results[0].url;
+        message.reply({ embeds: [new EmbedBuilder().setColor('#5865F2').setTitle('😭 Cry!').setDescription(`**${message.author.username}** is crying... someone give them a hug 😢`).setImage(gif).setTimestamp()] });
+      } catch { message.reply({ embeds: [new EmbedBuilder().setColor('#5865F2').setTitle('😭 Cry!').setDescription(`**${message.author.username}** is crying... 😢`).setTimestamp()] }); }
+      break;
+    }
+
+    case 'laugh': {
+      try {
+        const res = await fetch('https://nekos.best/api/v2/laugh');
+        const gif = (await res.json()).results[0].url;
+        message.reply({ embeds: [new EmbedBuilder().setColor('#FEE75C').setTitle('😂 Laugh!').setDescription(`**${message.author.username}** is dying of laughter! 🤣`).setImage(gif).setTimestamp()] });
+      } catch { message.reply({ embeds: [new EmbedBuilder().setColor('#FEE75C').setTitle('😂 Laugh!').setDescription(`**${message.author.username}** is laughing! 🤣`).setTimestamp()] }); }
+      break;
+    }
+
+    case 'horny': {
+      try {
+        const res = await fetch('https://nekos.best/api/v2/nod');
+        const gif = (await res.json()).results[0].url;
+        message.reply({ embeds: [new EmbedBuilder().setColor('#FF4500').setTitle('🥵 Horny!').setDescription(`**${message.author.username}** is feeling a certain way... 👀🔥`).setImage(gif).setTimestamp()] });
+      } catch { message.reply({ embeds: [new EmbedBuilder().setColor('#FF4500').setTitle('🥵 Horny!').setDescription(`**${message.author.username}** is feeling a certain way... 🔥`).setTimestamp()] }); }
+      break;
+    }
+
+    case 'marry': {
+      const t = message.mentions.users.first(); if (!t) return message.reply('❌ Mention someone to propose to!');
+      if (t.id === message.author.id) return message.reply('❌ You cannot marry yourself!');
+      try {
+        const res = await fetch('https://nekos.best/api/v2/handhold');
+        const gif = (await res.json()).results[0].url;
+        message.reply({ embeds: [new EmbedBuilder().setColor('#FFD700').setTitle('💍 Proposal!').setDescription(`**${message.author.username}** gets down on one knee and proposes to **${t.username}**! 💍
+
+Will they say yes? 👀`).setImage(gif).setTimestamp()] });
+      } catch { message.reply({ embeds: [new EmbedBuilder().setColor('#FFD700').setTitle('💍 Proposal!').setDescription(`**${message.author.username}** proposes to **${t.username}**! 💍`).setTimestamp()] }); }
+      break;
+    }
+
+    case 'divorce': {
+      const t = message.mentions.users.first(); if (!t) return message.reply('❌ Mention someone to divorce!');
+      try {
+        const res = await fetch('https://nekos.best/api/v2/sad');
+        const gif = (await res.json()).results[0].url;
+        message.reply({ embeds: [new EmbedBuilder().setColor('#ED4245').setTitle('💔 Divorce!').setDescription(`**${message.author.username}** is divorcing **${t.username}**... it's over 💔`).setImage(gif).setTimestamp()] });
+      } catch { message.reply({ embeds: [new EmbedBuilder().setColor('#ED4245').setTitle('💔 Divorce!').setDescription(`**${message.author.username}** is divorcing **${t.username}**... 💔`).setTimestamp()] }); }
+      break;
+    }
+
+    case 'hack': {
+      const t = message.mentions.users.first() || message.author;
+      const steps = ['🔍 Scanning target...', '🔓 Bypassing firewall...', '💾 Accessing database...', '📂 Downloading files...', '✅ Hack complete!'];
+      const embed = new EmbedBuilder().setColor('#00FF41').setTitle('💻 Hacking...').setDescription(`\`\`\`
+> Initiating hack on ${t.username}...
+\`\`\``).setTimestamp();
+      const msg = await message.reply({ embeds: [embed] });
+      let log = '';
+      for (const step of steps) {
+        await sleep(900);
+        log += `
+${step}`;
+        await msg.edit({ embeds: [new EmbedBuilder().setColor('#00FF41').setTitle('💻 Hacking...').setDescription(`\`\`\`
+> Initiating hack on ${t.username}...${log}
+\`\`\``).setTimestamp()] }).catch(() => {});
+      }
+      await sleep(600);
+      await msg.edit({ embeds: [new EmbedBuilder().setColor('#57F287').setTitle('💻 Hack Successful!').setDescription(`**${message.author.username}** successfully hacked **${t.username}**! 🖥️
+
+\`\`\`
+[✓] Firewall bypassed
+[✓] Data extracted
+[✓] Logs wiped
+[✓] Untraceable
+\`\`\``).setTimestamp()] }).catch(() => {});
+      break;
+    }
+
 
     // ── GAME COMMANDS ────────────────────────────────────────────────────────
 
