@@ -1826,44 +1826,6 @@ client.on('interactionCreate', async (interaction) => {
     }
   }
 
-  // Welcome Panel Buttons
-  if (!interaction.isButton() && !interaction.isStringSelectMenu()) return;
-  if (!interaction.customId?.startsWith('welcome:')) return;
-  if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild))
-    return interaction.reply({embeds:[errorEmbed('Need **Manage Server** permission.')],ephemeral:true});
-  const action = interaction.customId.split(':')[1];
-  const wcfg   = getWelcomeSettings(interaction.guild.id);
-  const refreshPanel = async () => {
-    const pm = welcomePanelMessages[interaction.guild.id];
-    if (pm) await pm.edit({embeds:[buildWelcomePanel(interaction.guild,wcfg)],components:buildWelcomeRows(wcfg)}).catch(()=>{});
-  };
-  const collectText = (prompt, ms, cb) => {
-    interaction.reply({embeds:[prompt],ephemeral:true});
-    const col = interaction.channel.createMessageCollector({filter:m=>m.author.id===interaction.user.id,time:ms,max:1});
-    col.on('collect', async m => { const v=m.content; m.delete().catch(()=>{}); if(v.toLowerCase()==='cancel') return interaction.editReply({embeds:[errorEmbed('Cancelled.')],components:[]}); await cb(v); });
-    col.on('end', c => { if(!c.size) interaction.editReply({embeds:[errorEmbed('Timed out.')],components:[]}).catch(()=>{}); });
-  };
-  if (action==='toggle')    { wcfg.enabled=!wcfg.enabled; return interaction.update({embeds:[buildWelcomePanel(interaction.guild,wcfg)],components:buildWelcomeRows(wcfg)}); }
-  if (action==='mode')      { wcfg.mode=wcfg.mode==='embed'?'text':'embed'; return interaction.update({embeds:[buildWelcomePanel(interaction.guild,wcfg)],components:buildWelcomeRows(wcfg)}); }
-  if (action==='thumbnail') { wcfg.thumbnail=!wcfg.thumbnail; return interaction.update({embeds:[buildWelcomePanel(interaction.guild,wcfg)],components:buildWelcomeRows(wcfg)}); }
-  if (action==='channel')   { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('📢 Set Channel').setDescription('Mention the channel or type `cancel`.'),60000,async v=>{const ch=interaction.guild.channels.cache.find(c=>v.includes(c.id));if(!ch||ch.type!==ChannelType.GuildText)return interaction.editReply({embeds:[errorEmbed('Invalid channel.')],components:[]});wcfg.channelId=ch.id;await interaction.editReply({embeds:[successEmbed('Channel Set',`<#${ch.id}>`)],components:[]});await refreshPanel();}); return; }
-  if (action==='title')     { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('📝 Set Title').setDescription(`Current: \`${wcfg.title}\``),120000,async v=>{if(v.length>256)return interaction.editReply({embeds:[errorEmbed('Max 256 chars.')],components:[]});wcfg.title=v;await interaction.editReply({embeds:[successEmbed('Updated',`\`${v}\``)],components:[]});await refreshPanel();}); return; }
-  if (action==='description'){ collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('📝 Set Description').setDescription('Type new description or `cancel`.'),180000,async v=>{if(v.length>4096)return interaction.editReply({embeds:[errorEmbed('Max 4096 chars.')],components:[]});wcfg.description=v;await interaction.editReply({embeds:[successEmbed('Updated','Saved.')],components:[]});await refreshPanel();}); return; }
-  if (action==='color')     { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('🎨 Set Color').setDescription('Type hex like `#FF5733` or `cancel`.'),60000,async v=>{if(!/^#[0-9A-Fa-f]{6}$/.test(v.trim()))return interaction.editReply({embeds:[errorEmbed('Use `#RRGGBB` format.')],components:[]});wcfg.color=v.trim();await interaction.editReply({embeds:[successEmbed('Updated',v.trim())],components:[]});await refreshPanel();}); return; }
-  if (action==='footer')    { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('📄 Set Footer').setDescription('Type footer or `none` to remove. Type `cancel` to abort.'),120000,async v=>{wcfg.footer=v.toLowerCase()==='none'?'':v;await interaction.editReply({embeds:[successEmbed('Updated',wcfg.footer||'Removed.')],components:[]});await refreshPanel();}); return; }
-  if (action==='text')      { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('💬 Set Text').setDescription('Type plain text message or `cancel`.'),180000,async v=>{if(v.length>2000)return interaction.editReply({embeds:[errorEmbed('Max 2000 chars.')],components:[]});wcfg.text=v;await interaction.editReply({embeds:[successEmbed('Updated','Saved.')],components:[]});await refreshPanel();}); return; }
-  if (action==='deletafter'){ collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('⏱️ Auto-Delete').setDescription('Seconds before welcome is deleted. `0` = never.'),60000,async v=>{const s=parseInt(v);if(isNaN(s)||s<0)return interaction.editReply({embeds:[errorEmbed('Enter valid seconds.')],components:[]});wcfg.deleteAfter=s;await interaction.editReply({embeds:[successEmbed('Set',s===0?'Never.': `${s}s`)],components:[]});await refreshPanel();}); return; }
-  if (action==='preview') {
-    const m=interaction.member;
-    if (wcfg.mode==='embed') {
-      const e=new EmbedBuilder().setColor(wcfg.color||'#57F287').setTitle(resolvePlaceholders(wcfg.title,m)).setDescription(resolvePlaceholders(wcfg.description,m)).setTimestamp();
-      if(wcfg.thumbnail) e.setThumbnail(m.user.displayAvatarURL({forceStatic:false}));
-      if(wcfg.footer)    e.setFooter({text:resolvePlaceholders(wcfg.footer,m)});
-      return interaction.reply({embeds:[e],ephemeral:true});
-    } return interaction.reply({content:resolvePlaceholders(wcfg.text,m),ephemeral:true});
-  }
-  if (action==='reset') { delete welcomeSettings[interaction.guild.id]; const f=getWelcomeSettings(interaction.guild.id); return interaction.update({embeds:[buildWelcomePanel(interaction.guild,f)],components:buildWelcomeRows(f)}); }
-
   // ── TEXAS HOLD'EM POKER ────────────────────────────────────────────────────
   if (interaction.isButton() && interaction.customId.startsWith('poker:')) {
     const act = interaction.customId.split(':')[1];
@@ -2025,6 +1987,45 @@ client.on('interactionCreate', async (interaction) => {
       return interaction.editReply({embeds:[buildPokerEmbed(g)],components:buildPokerActionRows(false)});
     }
   }
+
+  // Welcome Panel Buttons
+  if (!interaction.isButton() && !interaction.isStringSelectMenu()) return;
+  if (!interaction.customId?.startsWith('welcome:')) return;
+  if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild))
+    return interaction.reply({embeds:[errorEmbed('Need **Manage Server** permission.')],ephemeral:true});
+  const action = interaction.customId.split(':')[1];
+  const wcfg   = getWelcomeSettings(interaction.guild.id);
+  const refreshPanel = async () => {
+    const pm = welcomePanelMessages[interaction.guild.id];
+    if (pm) await pm.edit({embeds:[buildWelcomePanel(interaction.guild,wcfg)],components:buildWelcomeRows(wcfg)}).catch(()=>{});
+  };
+  const collectText = (prompt, ms, cb) => {
+    interaction.reply({embeds:[prompt],ephemeral:true});
+    const col = interaction.channel.createMessageCollector({filter:m=>m.author.id===interaction.user.id,time:ms,max:1});
+    col.on('collect', async m => { const v=m.content; m.delete().catch(()=>{}); if(v.toLowerCase()==='cancel') return interaction.editReply({embeds:[errorEmbed('Cancelled.')],components:[]}); await cb(v); });
+    col.on('end', c => { if(!c.size) interaction.editReply({embeds:[errorEmbed('Timed out.')],components:[]}).catch(()=>{}); });
+  };
+  if (action==='toggle')    { wcfg.enabled=!wcfg.enabled; return interaction.update({embeds:[buildWelcomePanel(interaction.guild,wcfg)],components:buildWelcomeRows(wcfg)}); }
+  if (action==='mode')      { wcfg.mode=wcfg.mode==='embed'?'text':'embed'; return interaction.update({embeds:[buildWelcomePanel(interaction.guild,wcfg)],components:buildWelcomeRows(wcfg)}); }
+  if (action==='thumbnail') { wcfg.thumbnail=!wcfg.thumbnail; return interaction.update({embeds:[buildWelcomePanel(interaction.guild,wcfg)],components:buildWelcomeRows(wcfg)}); }
+  if (action==='channel')   { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('📢 Set Channel').setDescription('Mention the channel or type `cancel`.'),60000,async v=>{const ch=interaction.guild.channels.cache.find(c=>v.includes(c.id));if(!ch||ch.type!==ChannelType.GuildText)return interaction.editReply({embeds:[errorEmbed('Invalid channel.')],components:[]});wcfg.channelId=ch.id;await interaction.editReply({embeds:[successEmbed('Channel Set',`<#${ch.id}>`)],components:[]});await refreshPanel();}); return; }
+  if (action==='title')     { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('📝 Set Title').setDescription(`Current: \`${wcfg.title}\``),120000,async v=>{if(v.length>256)return interaction.editReply({embeds:[errorEmbed('Max 256 chars.')],components:[]});wcfg.title=v;await interaction.editReply({embeds:[successEmbed('Updated',`\`${v}\``)],components:[]});await refreshPanel();}); return; }
+  if (action==='description'){ collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('📝 Set Description').setDescription('Type new description or `cancel`.'),180000,async v=>{if(v.length>4096)return interaction.editReply({embeds:[errorEmbed('Max 4096 chars.')],components:[]});wcfg.description=v;await interaction.editReply({embeds:[successEmbed('Updated','Saved.')],components:[]});await refreshPanel();}); return; }
+  if (action==='color')     { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('🎨 Set Color').setDescription('Type hex like `#FF5733` or `cancel`.'),60000,async v=>{if(!/^#[0-9A-Fa-f]{6}$/.test(v.trim()))return interaction.editReply({embeds:[errorEmbed('Use `#RRGGBB` format.')],components:[]});wcfg.color=v.trim();await interaction.editReply({embeds:[successEmbed('Updated',v.trim())],components:[]});await refreshPanel();}); return; }
+  if (action==='footer')    { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('📄 Set Footer').setDescription('Type footer or `none` to remove. Type `cancel` to abort.'),120000,async v=>{wcfg.footer=v.toLowerCase()==='none'?'':v;await interaction.editReply({embeds:[successEmbed('Updated',wcfg.footer||'Removed.')],components:[]});await refreshPanel();}); return; }
+  if (action==='text')      { collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('💬 Set Text').setDescription('Type plain text message or `cancel`.'),180000,async v=>{if(v.length>2000)return interaction.editReply({embeds:[errorEmbed('Max 2000 chars.')],components:[]});wcfg.text=v;await interaction.editReply({embeds:[successEmbed('Updated','Saved.')],components:[]});await refreshPanel();}); return; }
+  if (action==='deletafter'){ collectText(new EmbedBuilder().setColor('#FEE75C').setTitle('⏱️ Auto-Delete').setDescription('Seconds before welcome is deleted. `0` = never.'),60000,async v=>{const s=parseInt(v);if(isNaN(s)||s<0)return interaction.editReply({embeds:[errorEmbed('Enter valid seconds.')],components:[]});wcfg.deleteAfter=s;await interaction.editReply({embeds:[successEmbed('Set',s===0?'Never.': `${s}s`)],components:[]});await refreshPanel();}); return; }
+  if (action==='preview') {
+    const m=interaction.member;
+    if (wcfg.mode==='embed') {
+      const e=new EmbedBuilder().setColor(wcfg.color||'#57F287').setTitle(resolvePlaceholders(wcfg.title,m)).setDescription(resolvePlaceholders(wcfg.description,m)).setTimestamp();
+      if(wcfg.thumbnail) e.setThumbnail(m.user.displayAvatarURL({forceStatic:false}));
+      if(wcfg.footer)    e.setFooter({text:resolvePlaceholders(wcfg.footer,m)});
+      return interaction.reply({embeds:[e],ephemeral:true});
+    } return interaction.reply({content:resolvePlaceholders(wcfg.text,m),ephemeral:true});
+  }
+  if (action==='reset') { delete welcomeSettings[interaction.guild.id]; const f=getWelcomeSettings(interaction.guild.id); return interaction.update({embeds:[buildWelcomePanel(interaction.guild,f)],components:buildWelcomeRows(f)}); }
+
 });
 
 // ─── Message Deduplication Guard ─────────────────────────────────────────────
