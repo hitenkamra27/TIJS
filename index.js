@@ -502,8 +502,8 @@ const WC_DICTIONARY = new Set([
 ]);
 
 function isValidEnglishWord(word) {
-  if (word.length < 4) return false; // Minimum 4 letters — harder!
-  return WC_DICTIONARY.has(word.toLowerCase());
+  if (word.length < 3) return false; // Minimum 3 letters
+  return /^[a-z]+$/.test(word.toLowerCase()); // Only English alphabet letters allowed
 }
 
 function buildWordChainEmbed(g) {
@@ -512,13 +512,13 @@ function buildWordChainEmbed(g) {
   return new EmbedBuilder().setColor('#9B59B6').setTitle('🔗 Word Chain — HARDCORE MODE')
     .setDescription(
       `**Chain (last 6):** ${chain||'*Starting soon...*'}\n\n` +
-      `**Next letter:** \`${g.lastLetter.toUpperCase()}\` — must be **4+ letters**, a **real English word**, never repeated!\n\n` +
+      `**Next letter:** \`${g.lastLetter.toUpperCase()}\` — must be **3+ letters**, an **English word**, never repeated!\n\n` +
       `<@${g.currentTurn}>'s turn! You have **${timeLeft} seconds!**`
     )
     .addFields(
       {name:`<@${g.p1}> ❤️`,value:'❤️'.repeat(g.lives1||3)+'🖤'.repeat(3-(g.lives1||3))+'  `'+g.words1+'` words',inline:true},
       {name:`<@${g.p2}> ❤️`,value:'❤️'.repeat(g.lives2||3)+'🖤'.repeat(3-(g.lives2||3))+'  `'+g.words2+'` words',inline:true},
-    ).setFooter({text:`⏱️ ${timeLeft}s per turn • Min 4 letters • Real English only • No repeats`}).setTimestamp();
+    ).setFooter({text:`⏱️ ${timeLeft}s per turn • Min 3 letters • English words only • No repeats`}).setTimestamp();
 }
 
 // ─── Trivia Battle Helpers — HARD questions ────────────────────────────────────
@@ -1869,7 +1869,7 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
-  // Word Chain answer — HARDCORE: full dictionary, 4+ letters, 10s timer
+  // Word Chain answer — English letters only, 3+ letters, 15s timer
   const wcGame = wordChainGames[message.channel.id];
   if (wcGame && message.author.id===wcGame.currentTurn && !message.content.startsWith(PREFIX)) {
     const word = message.content.trim().toLowerCase();
@@ -1877,8 +1877,8 @@ client.on('messageCreate', async (message) => {
     clearTimeout(wcGame.timer);
 
     // Validation — strict English dictionary required
-    if (word.length < 4) {
-      const warningMsg = await message.reply(`❌ **"${word}"** is too short! Min **4 letters** required.\n⏱️ You still have time — try again!`);
+    if (word.length < 3) {
+      const warningMsg = await message.reply(`❌ **"${word}"** is too short! Min **3 letters** required.\n⏱️ You still have time — try again!`);
       // Restart timer for same player
       wcGame.timer = setTimeout(async () => {
         const loser = wcGame.currentTurn;
@@ -1927,7 +1927,7 @@ client.on('messageCreate', async (message) => {
       return;
     }
     if (!isValidEnglishWord(word)) {
-      const warningMsg = await message.reply(`❌ **"${word}"** is not a valid English word! Only real English dictionary words are allowed!\n⏱️ You still have time — try again!`);
+      const warningMsg = await message.reply(`❌ **"${word}"** contains non-English characters! Only English alphabet letters (a-z) are allowed.\n⏱️ You still have time — try again!`);
       wcGame.timer = setTimeout(async () => {
         const loser = wcGame.currentTurn;
         if (loser === wcGame.p1) wcGame.lives1--; else wcGame.lives2--;
@@ -1950,7 +1950,7 @@ client.on('messageCreate', async (message) => {
     if (wcGame.currentTurn === wcGame.p1) wcGame.words1++; else wcGame.words2++;
     wcGame.currentTurn = wcGame.currentTurn === wcGame.p1 ? wcGame.p2 : wcGame.p1;
     // Reduce time limit as chain grows (gets harder!)
-    wcGame.timeLimit = Math.max(6, 10 - Math.floor(wcGame.chain.length / 4));
+    wcGame.timeLimit = Math.max(8, 15 - Math.floor(wcGame.chain.length / 4));
 
     // Set timeout for next player
     wcGame.timer = setTimeout(async () => {
@@ -2888,10 +2888,10 @@ client.on('messageCreate', async (message) => {
       if(wordChainGames[message.channel.id]) return message.reply('❌ Word Chain already running here!');
       const starters='bcdfghlmnprst'; // Only consonants — harder starting letters
       const startLetter=starters[Math.floor(Math.random()*starters.length)];
-      const g={p1:message.author.id,p2:opp.id,chain:[],lastLetter:startLetter,currentTurn:message.author.id,used:new Set(),lives1:3,lives2:3,words1:0,words2:0,timeLimit:10,timer:null};
+      const g={p1:message.author.id,p2:opp.id,chain:[],lastLetter:startLetter,currentTurn:message.author.id,used:new Set(),lives1:3,lives2:3,words1:0,words2:0,timeLimit:15,timer:null};
       wordChainGames[message.channel.id]=g;
       const initMsg=await message.reply({embeds:[new EmbedBuilder().setColor('#9B59B6').setTitle('🔗 Word Chain — HARDCORE MODE 💀')
-        .setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\n\n📖 **Rules (STRICT):**\n• Each word must **start with the last letter** of the previous word\n• Words must be **4+ letters** (no short words!)\n• Words must be **real English dictionary words** (no slang, no names, no other languages!)\n• Wrong/invalid/repeated words **don't extend your timer** — you get penalized!\n• You start with **10 seconds** — timer shrinks as chain grows!\n• Lose all 3 ❤️ = eliminated\n\n⚠️ **Starting letter: ${startLetter.toUpperCase()}**\n\n*Prepare yourself...*`).setTimestamp()]});
+        .setDescription(`⚔️ **${message.author.username}** vs **${opp.user.username}**!\n\n📖 **Rules (STRICT):**\n• Each word must **start with the last letter** of the previous word\n• Words must be **3+ letters** (no very short words!)\n• Words must be **English only** (only English alphabet letters — no numbers, symbols, or other languages!)\n• Wrong/invalid/repeated words **don't extend your timer** — you get penalized!\n• You start with **15 seconds** — timer shrinks as chain grows!\n• Lose all 3 ❤️ = eliminated\n\n⚠️ **Starting letter: ${startLetter.toUpperCase()}**\n\n*Prepare yourself...*`).setTimestamp()]});
       await sleep(700);
       await initMsg.edit({embeds:[buildWordChainEmbed(g)]});
       g.timer=setTimeout(async()=>{
