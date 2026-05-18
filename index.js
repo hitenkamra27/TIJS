@@ -250,13 +250,47 @@ function checkC4(board) {
   }
   return false;
 }
+// Returns true if column col is already full
+function isC4ColFull(board, col) { return board[0][col] !== null; }
 function buildC4Embed(g, status) {
-  return new EmbedBuilder().setColor('#FEE75C').setTitle('🔴 Connect 4 🟡')
-    .setDescription(`<@${g.player1}> 🔴 vs 🟡 <@${g.player2}>\n\n${g.board.map(r=>r.map(c=>c||'⚫').join('')).join('\n')}\n\n${status}`).setTimestamp();
+  // Column number header + last-drop arrow indicator
+  const colNums = [1,2,3,4,5,6,7].map((n,i) => g.lastCol===i ? '⬇️' : `${n}️⃣`).join('');
+  const boardStr = g.board.map(r => r.map(c => c || '⚫').join('')).join('\n');
+  const moveInfo = g.moves ? `\n\n🎯 **Move ${g.moves}**` : '';
+  return new EmbedBuilder()
+    .setColor(g.symbol==='🔴' ? '#FF4444' : '#FFD700')
+    .setTitle('🔴 Connect 4 🟡')
+    .setDescription(`<@${g.player1}> 🔴 vs 🟡 <@${g.player2}>\n\n${colNums}\n${boardStr}${moveInfo}\n\n${status}`)
+    .setFooter({ text: 'Drop your piece — connect 4 in a row to win!' })
+    .setTimestamp();
 }
-const buildC4Rows = (disabled) => [new ActionRowBuilder().addComponents(
-  ...[0,1,2,3,4,5,6].map(c => new ButtonBuilder().setCustomId(`c4:${c}`).setLabel(`${c+1}`).setStyle(ButtonStyle.Primary).setDisabled(disabled))
-)];
+// ── FIX: Discord allows max 5 buttons per ActionRow — split 7 cols into 2 rows (4 + 3)
+function buildC4Rows(disabled, board) {
+  const colLabels = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣'];
+  const colStyles = [ButtonStyle.Primary, ButtonStyle.Primary, ButtonStyle.Primary, ButtonStyle.Primary,
+                     ButtonStyle.Success, ButtonStyle.Success, ButtonStyle.Success];
+  const row1 = new ActionRowBuilder().addComponents(
+    ...[0,1,2,3].map(c => {
+      const full = board ? isC4ColFull(board, c) : false;
+      return new ButtonBuilder()
+        .setCustomId(`c4:${c}`)
+        .setLabel(colLabels[c])
+        .setStyle(full ? ButtonStyle.Danger : colStyles[c])
+        .setDisabled(disabled || full);
+    })
+  );
+  const row2 = new ActionRowBuilder().addComponents(
+    ...[4,5,6].map(c => {
+      const full = board ? isC4ColFull(board, c) : false;
+      return new ButtonBuilder()
+        .setCustomId(`c4:${c}`)
+        .setLabel(colLabels[c])
+        .setStyle(full ? ButtonStyle.Danger : colStyles[c])
+        .setDisabled(disabled || full);
+    })
+  );
+  return [row1, row2];
+}
 
 // ─── Blackjack Helpers ────────────────────────────────────────────────────────
 const SUITS=['♠','♥','♦','♣'], RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
@@ -1294,17 +1328,27 @@ client.on('interactionCreate', async (interaction) => {
   // Connect4
   if (interaction.isButton() && interaction.customId.startsWith('c4:')) {
     const game = c4Games[interaction.channel.id];
-    if (!game) return interaction.reply({content:'❌ No active game.',ephemeral:true});
-    if (interaction.user.id !== game.currentPlayer) return interaction.reply({content:'❌ Not your turn!',ephemeral:true});
+    if (!game) return interaction.reply({content:'❌ No active Connect 4 game here.',ephemeral:true});
+    if (interaction.user.id !== game.currentPlayer) return interaction.reply({content:`❌ Not your turn! It's <@${game.currentPlayer}>'s turn.`,ephemeral:true});
     const col = parseInt(interaction.customId.split(':')[1]);
-    if (dropC4(game.board,col,game.symbol) === -1) return interaction.reply({content:'❌ Column full!',ephemeral:true});
+    if (isC4ColFull(game.board, col)) return interaction.reply({content:'❌ That column is full! Pick another.',ephemeral:true});
+    dropC4(game.board, col, game.symbol);
+    game.lastCol = col;
+    game.moves = (game.moves || 0) + 1;
     const win  = checkC4(game.board);
     const full = game.board[0].every(c=>c!==null);
-    if (win) { delete c4Games[interaction.channel.id]; return interaction.update({embeds:[buildC4Embed(game,`🎉 <@${interaction.user.id}> wins!`)],components:buildC4Rows(true)}); }
-    if (full){ delete c4Games[interaction.channel.id]; return interaction.update({embeds:[buildC4Embed(game,"🤝 Draw!")],components:buildC4Rows(true)}); }
+    if (win) {
+      const winnerSym = game.symbol;
+      delete c4Games[interaction.channel.id];
+      return interaction.update({embeds:[buildC4Embed(game,`🎉 **<@${interaction.user.id}> wins!** ${winnerSym} connects 4! (${game.moves} moves)`)],components:buildC4Rows(true,game.board)});
+    }
+    if (full) {
+      delete c4Games[interaction.channel.id];
+      return interaction.update({embeds:[buildC4Embed(game,`🤝 **Draw!** The board is full after ${game.moves} moves!`)],components:buildC4Rows(true,game.board)});
+    }
     game.currentPlayer = game.currentPlayer===game.player1?game.player2:game.player1;
     game.symbol = game.symbol==='🔴'?'🟡':'🔴';
-    return interaction.update({embeds:[buildC4Embed(game,`<@${game.currentPlayer}>'s turn (${game.symbol})`)],components:buildC4Rows(false)});
+    return interaction.update({embeds:[buildC4Embed(game,`<@${game.currentPlayer}>'s turn (${game.symbol})`)],components:buildC4Rows(false,game.board)});
   }
 
   // Blackjack
@@ -1596,7 +1640,7 @@ client.on('interactionCreate', async (interaction) => {
       g.communityCards = []; g.currentTurn = p.id;
       const handMsg = `✅ <@${p.id}> folded! <@${opp.id}> wins **${winAmt}** chips!\n\n**New Round ${g.round}/10** | Your hole cards (check DMs!)`;
       try { await interaction.user.send(`🃏 **Your hole cards (Round ${g.round}):** ${pokerHandStr(p.hand)}`); } catch{}
-      try { await opp.dmSent || interaction.guild.members.fetch(opp.id).then(m=>m.send(`🃏 **Your hole cards (Round ${g.round}):** ${pokerHandStr(opp.hand)}`)).catch(()=>{}); } catch{}
+      try { await interaction.guild.members.fetch(opp.id).then(m=>m.user.send(`🃏 **Your hole cards (Round ${g.round}):** ${pokerHandStr(opp.hand)}`)).catch(()=>{}); } catch{}
       return interaction.update({embeds:[buildPokerEmbed(g).setDescription(`${handMsg}`)],components:buildPokerActionRows(false)});
     }
 
@@ -1636,11 +1680,14 @@ client.on('interactionCreate', async (interaction) => {
           g.deck = makePokerDeck();
           g.players[0].hand=[g.deck.pop(),g.deck.pop()]; g.players[1].hand=[g.deck.pop(),g.deck.pop()];
           g.players[0].folded=false; g.players[1].folded=false;
+          g.players[0].allIn=false; g.players[1].allIn=false;
           g.communityCards=[]; g.currentTurn=g.players[0].id;
           g.players[0].bet=10; g.players[1].bet=20;
           g.players[0].chips=Math.max(0,g.players[0].chips-10); g.players[1].chips=Math.max(0,g.players[1].chips-20);
+          if(g.players[0].chips===0) g.players[0].allIn=true;
+          if(g.players[1].chips===0) g.players[1].allIn=true;
           try{await interaction.user.send(`🃏 **Hole cards R${g.round}:** ${pokerHandStr(g.players[0].hand)}`);}catch{}
-          try{await interaction.guild.members.fetch(g.players[1].id).then(m=>m.send(`🃏 **Hole cards R${g.round}:** ${pokerHandStr(g.players[1].hand)}`)).catch(()=>{});}catch{}
+          try{await interaction.guild.members.fetch(g.players[1].id).then(m=>m.user.send(`🃏 **Hole cards R${g.round}:** ${pokerHandStr(g.players[1].hand)}`)).catch(()=>{});}catch{}
           return interaction.update({embeds:[new EmbedBuilder().setColor('#1A472A').setTitle(`🃏 Poker — Round ${g.round}/10`)
             .setDescription(`**Showdown Results:**\n${resultDesc}\n\n**New Round — Community cards:** *Pre-flop*\n<@${g.players[0].id}>: **${g.players[0].chips}** chips | <@${g.players[1].id}>: **${g.players[1].chips}** chips`)
             .setTimestamp()],components:buildPokerActionRows(false)});
@@ -1653,9 +1700,46 @@ client.on('interactionCreate', async (interaction) => {
       p.chips -= callAmt; p.bet += callAmt;
       if (p.chips === 0) p.allIn = true;
       // After call, advance to next street
-      if (g.communityCards.length < 5) {
-        if (g.communityCards.length === 0) g.communityCards = [g.deck.pop(),g.deck.pop(),g.deck.pop()];
-        else g.communityCards.push(g.deck.pop());
+      if (g.communityCards.length === 0) g.communityCards = [g.deck.pop(),g.deck.pop(),g.deck.pop()];
+      else if (g.communityCards.length < 5) g.communityCards.push(g.deck.pop());
+      // If all 5 community cards are now out, go straight to showdown
+      if (g.communityCards.length === 5) {
+        const p1hand = evaluatePokerHand([...g.players[0].hand, ...g.communityCards]);
+        const p2hand = evaluatePokerHand([...g.players[1].hand, ...g.communityCards]);
+        const pot = (g.pot||0) + g.players[0].bet + g.players[1].bet;
+        let resultDesc = '';
+        if (p1hand.rank > p2hand.rank || (p1hand.rank===p2hand.rank && p1hand.tiebreak > p2hand.tiebreak)) {
+          g.players[0].chips += pot;
+          resultDesc = `🏆 **<@${g.players[0].id}> wins ${pot} chips!**\n${p1hand.name} beats ${p2hand.name}`;
+        } else if (p2hand.rank > p1hand.rank || (p2hand.rank===p1hand.rank && p2hand.tiebreak > p1hand.tiebreak)) {
+          g.players[1].chips += pot;
+          resultDesc = `🏆 **<@${g.players[1].id}> wins ${pot} chips!**\n${p2hand.name} beats ${p1hand.name}`;
+        } else {
+          g.players[0].chips += Math.floor(pot/2); g.players[1].chips += Math.floor(pot/2);
+          resultDesc = `🤝 **Split pot! ${Math.floor(pot/2)} chips each.**`;
+        }
+        g.round++; g.pot = 0; g.players[0].bet = 0; g.players[1].bet = 0;
+        if (g.round > 10 || g.players[0].chips <= 0 || g.players[1].chips <= 0) {
+          const finalW = g.players[0].chips >= g.players[1].chips ? g.players[0] : g.players[1];
+          delete pokerGames[interaction.channel.id];
+          return interaction.update({embeds:[new EmbedBuilder().setColor('#FFD700').setTitle('🃏 Poker — Showdown!')
+            .setDescription(`**Community:** ${pokerHandStr(g.communityCards)}\n**<@${g.players[0].id}>:** ${pokerHandStr(g.players[0].hand)} → ${p1hand.name}\n**<@${g.players[1].id}>:** ${pokerHandStr(g.players[1].hand)} → ${p2hand.name}\n\n${resultDesc}\n\n🏆 **<@${finalW.id}> WINS THE MATCH!**`)
+            .setTimestamp()],components:[]});
+        }
+        g.deck = makePokerDeck();
+        g.players[0].hand=[g.deck.pop(),g.deck.pop()]; g.players[1].hand=[g.deck.pop(),g.deck.pop()];
+        g.players[0].folded=false; g.players[1].folded=false;
+        g.players[0].allIn=false; g.players[1].allIn=false;
+        g.communityCards=[]; g.currentTurn=g.players[0].id;
+        g.players[0].bet=10; g.players[1].bet=20;
+        g.players[0].chips=Math.max(0,g.players[0].chips-10); g.players[1].chips=Math.max(0,g.players[1].chips-20);
+        if(g.players[0].chips===0) g.players[0].allIn=true;
+        if(g.players[1].chips===0) g.players[1].allIn=true;
+        try{await interaction.user.send(`🃏 **Hole cards R${g.round}:** ${pokerHandStr(g.players[0].hand)}`);}catch{}
+        try{await interaction.guild.members.fetch(g.players[1].id).then(m=>m.user.send(`🃏 **Hole cards R${g.round}:** ${pokerHandStr(g.players[1].hand)}`)).catch(()=>{});}catch{}
+        return interaction.update({embeds:[new EmbedBuilder().setColor('#1A472A').setTitle(`🃏 Poker — Round ${g.round}/10`)
+          .setDescription(`**Showdown Results:**\n${resultDesc}\n\n**New Round — Community cards:** *Pre-flop*\n<@${g.players[0].id}>: **${g.players[0].chips}** chips | <@${g.players[1].id}>: **${g.players[1].chips}** chips`)
+          .setTimestamp()],components:buildPokerActionRows(false)});
       }
       g.currentTurn = opp.id;
       return interaction.update({embeds:[buildPokerEmbed(g)],components:buildPokerActionRows(false)});
@@ -2824,12 +2908,12 @@ client.on('messageCreate', async (message) => {
       const opp=message.mentions.members.first();
       if(!opp||opp.user.bot||opp.id===message.member.id) return message.reply('❌ Mention a valid opponent! Usage: `!c4 @user`');
       if(c4Games[message.channel.id]) return message.reply('❌ Game already running here!');
-      const g={board:makeC4Board(),player1:message.author.id,player2:opp.id,currentPlayer:message.author.id,symbol:'🔴'};
+      const g={board:makeC4Board(),player1:message.author.id,player2:opp.id,currentPlayer:message.author.id,symbol:'🔴',moves:0,lastCol:null};
       c4Games[message.channel.id]=g;
-      const c4Msg = await message.reply({embeds:[new EmbedBuilder().setColor('#FEE75C').setTitle('🔴 Connect 4 🟡')
-        .setDescription(`⚔️ **${message.author.username}** 🔴 challenges **${opp.user.username}** 🟡!\n\n📖 **How to play:**\n• **2 players** take turns dropping pieces\n• <@${message.author.id}> is 🔴 | <@${opp.id}> is 🟡\n• Click a **column button (1–7)** to drop your piece\n• Connect **4 in a row** (horizontally, vertically, or diagonally) to win!\n• ⚫ = empty cell\n\n*Dropping pieces into position...*`).setTimestamp()]});
+      const c4Msg = await message.reply({embeds:[new EmbedBuilder().setColor('#FF4444').setTitle('🔴 Connect 4 🟡')
+        .setDescription(`⚔️ **${message.author.username}** 🔴 challenges **${opp.user.username}** 🟡!\n\n📖 **How to play:**\n• **2 players** take turns dropping pieces\n• <@${message.author.id}> is 🔴 | <@${opp.id}> is 🟡\n• Click a **column button** to drop your piece (columns 1–4 on top row, 5–7 on bottom row)\n• Connect **4 in a row** (horizontally, vertically, or diagonally) to win!\n• ⚫ = empty | Full columns are disabled automatically!\n\n*Setting up the board...*`).setTimestamp()]});
       await sleep(700);
-      await c4Msg.edit({embeds:[buildC4Embed(g,`<@${message.author.id}>'s turn (🔴)`)],components:buildC4Rows(false)});
+      await c4Msg.edit({embeds:[buildC4Embed(g,`<@${message.author.id}>'s turn (🔴)`)],components:buildC4Rows(false,g.board)});
       break;
     }
 
@@ -3101,7 +3185,7 @@ client.on('messageCreate', async (message) => {
 
       // Send hole cards via DM
       try { await message.author.send(`🃏 **Your hole cards (Round 1):** ${pokerHandStr(p1.hand)}\n_(Keep these secret!)_`); } catch { await message.channel.send(`⚠️ <@${message.author.id}> couldn't receive DM! Enable DMs to see your cards.`); }
-      try { await opp.send(`🃏 **Your hole cards (Round 1):** ${pokerHandStr(p2.hand)}\n_(Keep these secret!)_`); } catch { await message.channel.send(`⚠️ <@${opp.id}> couldn't receive DM! Enable DMs to see your cards.`); }
+      try { await opp.user.send(`🃏 **Your hole cards (Round 1):** ${pokerHandStr(p2.hand)}\n_(Keep these secret!)_`); } catch { await message.channel.send(`⚠️ <@${opp.id}> couldn't receive DM! Enable DMs to see your cards.`); }
 
       await sleep(1000);
       await initMsg.edit({embeds:[buildPokerEmbed(g)], components: buildPokerActionRows(false)});
