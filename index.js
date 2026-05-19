@@ -1210,30 +1210,149 @@ function buildPokerActionRows(disabled) {
 // ═══════════════════════════════════════════════════════════════════════════════
 const quizShowdownGames = {};
 const QUIZ_SHOWDOWN_Q = [
-  {q:'What is 15 × 15?',a:'225',c:['200','225','215','250']},
-  {q:'Which country is the largest by area?',a:'Russia',c:['Canada','USA','Russia','China']},
-  {q:'What gas do plants absorb?',a:'Carbon Dioxide',c:['Oxygen','Nitrogen','Carbon Dioxide','Hydrogen']},
-  {q:'Who painted the Mona Lisa?',a:'Leonardo da Vinci',c:['Picasso','Michelangelo','Leonardo da Vinci','Raphael']},
-  {q:'How many sides does an octagon have?',a:'8',c:['6','7','8','9']},
-  {q:'What is the chemical symbol for gold?',a:'Au',c:['Go','Gd','Au','Ag']},
-  {q:'Which planet is closest to the Sun?',a:'Mercury',c:['Venus','Mercury','Mars','Earth']},
-  {q:'In what year did World War II end?',a:'1945',c:['1943','1944','1945','1946']},
-  {q:'What is the square root of 256?',a:'16',c:['14','15','16','18']},
-  {q:'Which ocean is the largest?',a:'Pacific',c:['Atlantic','Indian','Pacific','Arctic']},
-  {q:'How many chromosomes do humans have?',a:'46',c:['42','44','46','48']},
-  {q:'What is the fastest land animal?',a:'Cheetah',c:['Lion','Cheetah','Leopard','Horse']},
-  {q:'How many strings does a standard guitar have?',a:'6',c:['4','5','6','8']},
-  {q:'What is Pi (first 3 digits)?',a:'3.14',c:['3.12','3.14','3.16','3.18']},
-  {q:'Which element has the symbol "O"?',a:'Oxygen',c:['Osmium','Oxygen','Oganesson','Ozone']},
+  // ── Mathematics ──
+  {q:'What is 17 × 13?',a:'221',c:['199','213','221','231'],cat:'🧮 Math'},
+  {q:'What is 15 × 15?',a:'225',c:['200','225','215','250'],cat:'🧮 Math'},
+  {q:'What is the square root of 256?',a:'16',c:['14','15','16','18'],cat:'🧮 Math'},
+  {q:'What is the square root of 169?',a:'13',c:['11','12','13','14'],cat:'🧮 Math'},
+  {q:'What is Pi (first 3 digits)?',a:'3.14',c:['3.12','3.14','3.16','3.18'],cat:'🧮 Math'},
+  {q:'What is 2 to the power of 10?',a:'1024',c:['512','1000','1024','2048'],cat:'🧮 Math'},
+  {q:'How many sides does a heptagon have?',a:'7',c:['5','6','7','8'],cat:'🧮 Math'},
+  {q:'What is 15% of 200?',a:'30',c:['30','25','35','20'],cat:'🧮 Math'},
+  {q:'What is the next prime after 23?',a:'29',c:['25','29','27','31'],cat:'🧮 Math'},
+  {q:'What is 12 cubed?',a:'1728',c:['1296','1728','1600','2000'],cat:'🧮 Math'},
+  {q:'What is 144 divided by 12?',a:'12',c:['10','11','12','13'],cat:'🧮 Math'},
+  {q:'What is the sum of angles in a triangle?',a:'180',c:['90','180','270','360'],cat:'🧮 Math'},
+  {q:'What is 9 factorial (9!)?',a:'362880',c:['40320','362880','720','5040'],cat:'🧮 Math'},
+  {q:'What is the value of e (Euler\'s number, 2 decimals)?',a:'2.72',c:['2.14','2.72','3.14','1.61'],cat:'🧮 Math'},
+  {q:'How many zeros are in one billion?',a:'9',c:['6','7','9','12'],cat:'🧮 Math'},
+  {q:'What is 23 × 7?',a:'161',c:['151','156','161','168'],cat:'🧮 Math'},
+  {q:'What is the LCM of 4 and 6?',a:'12',c:['6','8','12','24'],cat:'🧮 Math'},
+  {q:'What is the GCF of 36 and 48?',a:'12',c:['6','8','12','18'],cat:'🧮 Math'},
+  // ── Science ──
+  {q:'What gas do plants absorb from the atmosphere?',a:'Carbon Dioxide',c:['Oxygen','Nitrogen','Carbon Dioxide','Hydrogen'],cat:'🔬 Science'},
+  {q:'What is the chemical symbol for gold?',a:'Au',c:['Go','Gd','Au','Ag'],cat:'🔬 Science'},
+  {q:'Which planet is closest to the Sun?',a:'Mercury',c:['Venus','Mercury','Mars','Earth'],cat:'🔬 Science'},
+  {q:'How many chromosomes do humans have?',a:'46',c:['42','44','46','48'],cat:'🔬 Science'},
+  {q:'What is the fastest land animal?',a:'Cheetah',c:['Lion','Cheetah','Leopard','Horse'],cat:'🔬 Science'},
+  {q:'What element has the symbol "O"?',a:'Oxygen',c:['Osmium','Oxygen','Oganesson','Ozone'],cat:'🔬 Science'},
+  {q:'What is the powerhouse of the cell?',a:'Mitochondria',c:['Mitochondria','Nucleus','Ribosome','Vacuole'],cat:'🔬 Science'},
+  {q:'How many elements are on the periodic table?',a:'118',c:['108','112','116','118'],cat:'🔬 Science'},
+  {q:'What planet has the most moons?',a:'Saturn',c:['Jupiter','Saturn','Uranus','Neptune'],cat:'🔬 Science'},
+  {q:'What is the boiling point of water in Celsius?',a:'100',c:['90','100','110','212'],cat:'🔬 Science'},
+  {q:'What is the chemical formula for water?',a:'H2O',c:['H2O','HO2','H3O','OH2'],cat:'🔬 Science'},
+  {q:'Which planet is known as the Red Planet?',a:'Mars',c:['Venus','Mars','Jupiter','Saturn'],cat:'🔬 Science'},
+  {q:'How many bones are in the adult human body?',a:'206',c:['186','196','206','216'],cat:'🔬 Science'},
+  {q:'What is the speed of light (approx, km/s)?',a:'300000',c:['150000','200000','300000','400000'],cat:'🔬 Science'},
+  {q:'What is the atomic number of Carbon?',a:'6',c:['4','6','8','12'],cat:'🔬 Science'},
+  {q:'What is the hardest natural substance on Earth?',a:'Diamond',c:['Quartz','Topaz','Diamond','Corundum'],cat:'🔬 Science'},
+  {q:'How many hearts does an octopus have?',a:'3',c:['1','2','3','4'],cat:'🔬 Science'},
+  {q:'What is the chemical symbol for iron?',a:'Fe',c:['Ir','In','Fe','Fo'],cat:'🔬 Science'},
+  {q:'What gas makes up most of Earth\'s atmosphere?',a:'Nitrogen',c:['Oxygen','Nitrogen','Argon','Carbon Dioxide'],cat:'🔬 Science'},
+  {q:'What is the largest organ in the human body?',a:'Skin',c:['Liver','Heart','Skin','Brain'],cat:'🔬 Science'},
+  {q:'What force keeps planets in orbit around the Sun?',a:'Gravity',c:['Magnetism','Gravity','Friction','Centrifugal force'],cat:'🔬 Science'},
+  {q:'How many legs does a spider have?',a:'8',c:['6','7','8','10'],cat:'🔬 Science'},
+  {q:'Which blood type is the universal donor?',a:'O negative',c:['A positive','O positive','AB negative','O negative'],cat:'🔬 Science'},
+  // ── Geography ──
+  {q:'What is the largest country by area?',a:'Russia',c:['Canada','USA','Russia','China'],cat:'🌍 Geography'},
+  {q:'What is the capital of Australia?',a:'Canberra',c:['Sydney','Melbourne','Canberra','Brisbane'],cat:'🌍 Geography'},
+  {q:'Which country has the most natural lakes?',a:'Canada',c:['Canada','Russia','USA','Brazil'],cat:'🌍 Geography'},
+  {q:'What is the longest river in the world?',a:'Nile',c:['Amazon','Nile','Yangtze','Mississippi'],cat:'🌍 Geography'},
+  {q:'Which continent has the most countries?',a:'Africa',c:['Africa','Asia','Europe','South America'],cat:'🌍 Geography'},
+  {q:'What is the smallest country in the world?',a:'Vatican City',c:['Monaco','Nauru','Vatican City','San Marino'],cat:'🌍 Geography'},
+  {q:'Which ocean is the largest?',a:'Pacific',c:['Pacific','Atlantic','Indian','Arctic'],cat:'🌍 Geography'},
+  {q:'What is the capital of Japan?',a:'Tokyo',c:['Osaka','Tokyo','Kyoto','Hiroshima'],cat:'🌍 Geography'},
+  {q:'Which country is the largest by population?',a:'India',c:['China','India','USA','Indonesia'],cat:'🌍 Geography'},
+  {q:'What is the capital of Brazil?',a:'Brasília',c:['Rio de Janeiro','São Paulo','Brasília','Salvador'],cat:'🌍 Geography'},
+  {q:'Which desert is the largest in the world?',a:'Antarctic Desert',c:['Sahara','Arabian','Gobi','Antarctic Desert'],cat:'🌍 Geography'},
+  {q:'What is the tallest mountain in the world?',a:'Mount Everest',c:['K2','Kangchenjunga','Mount Everest','Makalu'],cat:'🌍 Geography'},
+  {q:'What is the longest wall in history?',a:'Great Wall of China',c:['Hadrian\'s Wall','Great Wall of China','Berlin Wall','Aurelian Wall'],cat:'🌍 Geography'},
+  {q:'Which country has the most time zones?',a:'France',c:['Russia','USA','China','France'],cat:'🌍 Geography'},
+  {q:'What is the capital of Canada?',a:'Ottawa',c:['Toronto','Vancouver','Ottawa','Montreal'],cat:'🌍 Geography'},
+  {q:'What is the largest lake in the world?',a:'Caspian Sea',c:['Lake Superior','Lake Baikal','Caspian Sea','Lake Victoria'],cat:'🌍 Geography'},
+  {q:'Which country does the Amazon River flow through the most?',a:'Brazil',c:['Peru','Colombia','Brazil','Venezuela'],cat:'🌍 Geography'},
+  // ── History ──
+  {q:'In what year did World War II end?',a:'1945',c:['1943','1944','1945','1946'],cat:'📜 History'},
+  {q:'Who was the first person to walk on the Moon?',a:'Neil Armstrong',c:['Neil Armstrong','Buzz Aldrin','Yuri Gagarin','John Glenn'],cat:'📜 History'},
+  {q:'Which empire was the largest in history?',a:'British Empire',c:['Roman Empire','British Empire','Mongol Empire','Ottoman Empire'],cat:'📜 History'},
+  {q:'In what year did the Berlin Wall fall?',a:'1989',c:['1987','1988','1989','1990'],cat:'📜 History'},
+  {q:'Who painted the Mona Lisa?',a:'Leonardo da Vinci',c:['Leonardo da Vinci','Michelangelo','Raphael','Botticelli'],cat:'📜 History'},
+  {q:'In what year did World War I begin?',a:'1914',c:['1912','1914','1916','1918'],cat:'📜 History'},
+  {q:'Who was the first President of the United States?',a:'George Washington',c:['George Washington','John Adams','Thomas Jefferson','James Madison'],cat:'📜 History'},
+  {q:'In which year did the Titanic sink?',a:'1912',c:['1909','1912','1915','1918'],cat:'📜 History'},
+  {q:'What ancient wonder was located in Alexandria?',a:'Lighthouse of Alexandria',c:['Great Pyramid','Hanging Gardens','Lighthouse of Alexandria','Colossus of Rhodes'],cat:'📜 History'},
+  {q:'Who was the first woman to win a Nobel Prize?',a:'Marie Curie',c:['Marie Curie','Florence Nightingale','Rosalind Franklin','Ada Lovelace'],cat:'📜 History'},
+  {q:'In what year did the French Revolution begin?',a:'1789',c:['1776','1783','1789','1804'],cat:'📜 History'},
+  {q:'Which ancient civilization built Machu Picchu?',a:'Inca',c:['Aztec','Maya','Inca','Olmec'],cat:'📜 History'},
+  {q:'Who invented the telephone?',a:'Alexander Graham Bell',c:['Alexander Graham Bell','Thomas Edison','Nikola Tesla','Guglielmo Marconi'],cat:'📜 History'},
+  {q:'What year did the first iPhone launch?',a:'2007',c:['2005','2006','2007','2008'],cat:'📜 History'},
+  {q:'In which city was the first modern Olympic Games held?',a:'Athens',c:['Paris','London','Athens','Rome'],cat:'📜 History'},
+  // ── Technology ──
+  {q:'What does "HTTP" stand for?',a:'HyperText Transfer Protocol',c:['HyperText Transfer Protocol','High Transfer Text Protocol','Hyper Terminal Text Processing','Host Transfer Protocol'],cat:'💻 Technology'},
+  {q:'Which company created the Java programming language?',a:'Sun Microsystems',c:['Microsoft','Sun Microsystems','IBM','Apple'],cat:'💻 Technology'},
+  {q:'How many bits are in a byte?',a:'8',c:['4','6','8','16'],cat:'💻 Technology'},
+  {q:'What does "CPU" stand for?',a:'Central Processing Unit',c:['Central Processing Unit','Core Processor Unit','Computer Power Unit','Central Power Utility'],cat:'💻 Technology'},
+  {q:'What does "RAM" stand for?',a:'Random Access Memory',c:['Read Access Memory','Random Access Memory','Rapid Array Memory','Read-only Array Memory'],cat:'💻 Technology'},
+  {q:'Which programming language was created by Guido van Rossum?',a:'Python',c:['Ruby','Python','Perl','Java'],cat:'💻 Technology'},
+  {q:'What does "URL" stand for?',a:'Uniform Resource Locator',c:['Universal Resource Locator','Uniform Resource Locator','Unified Registry Link','Universal Registry Link'],cat:'💻 Technology'},
+  {q:'Who co-founded Apple Inc. with Steve Jobs?',a:'Steve Wozniak',c:['Bill Gates','Steve Wozniak','Tim Cook','Jony Ive'],cat:'💻 Technology'},
+  {q:'What year was the World Wide Web invented?',a:'1989',c:['1983','1985','1989','1993'],cat:'💻 Technology'},
+  {q:'What does "AI" stand for?',a:'Artificial Intelligence',c:['Artificial Intelligence','Automated Input','Advanced Integration','Algorithmic Interface'],cat:'💻 Technology'},
+  {q:'Which company owns YouTube?',a:'Google',c:['Meta','Amazon','Google','Microsoft'],cat:'💻 Technology'},
+  {q:'What is the most widely used programming language in 2024?',a:'Python',c:['Java','JavaScript','Python','C++'],cat:'💻 Technology'},
+  // ── Pop Culture & Entertainment ──
+  {q:'How many strings does a standard guitar have?',a:'6',c:['4','6','7','8'],cat:'🎭 Pop Culture'},
+  {q:'Which band wrote "Bohemian Rhapsody"?',a:'Queen',c:['Queen','The Beatles','Led Zeppelin','Rolling Stones'],cat:'🎭 Pop Culture'},
+  {q:'How many Harry Potter books are there?',a:'7',c:['6','7','8','9'],cat:'🎭 Pop Culture'},
+  {q:'What sport is played at Wimbledon?',a:'Tennis',c:['Tennis','Cricket','Badminton','Squash'],cat:'🎭 Pop Culture'},
+  {q:'Which TV show features the fictional country "Westeros"?',a:'Game of Thrones',c:['Game of Thrones','The Witcher','Lord of the Rings','Vikings'],cat:'🎭 Pop Culture'},
+  {q:'Who wrote the "Lord of the Rings" series?',a:'J.R.R. Tolkien',c:['C.S. Lewis','J.R.R. Tolkien','George R.R. Martin','Terry Pratchett'],cat:'🎭 Pop Culture'},
+  {q:'What movie features the quote "I\'ll be back"?',a:'The Terminator',c:['RoboCop','Die Hard','The Terminator','Predator'],cat:'🎭 Pop Culture'},
+  {q:'Which country does K-pop originate from?',a:'South Korea',c:['Japan','China','South Korea','Taiwan'],cat:'🎭 Pop Culture'},
+  {q:'What is the best-selling video game of all time?',a:'Minecraft',c:['Tetris','Minecraft','GTA V','Wii Sports'],cat:'🎭 Pop Culture'},
+  {q:'How many seasons does "Breaking Bad" have?',a:'5',c:['4','5','6','7'],cat:'🎭 Pop Culture'},
+  {q:'Who voiced Woody in Toy Story?',a:'Tom Hanks',c:['Tom Hanks','Tim Allen','Billy Crystal','Robin Williams'],cat:'🎭 Pop Culture'},
+  {q:'What year was the first Marvel Cinematic Universe film released?',a:'2008',c:['2005','2006','2007','2008'],cat:'🎭 Pop Culture'},
+  // ── Food & Nature ──
+  {q:'Which country is the largest producer of coffee?',a:'Brazil',c:['Colombia','Brazil','Ethiopia','Vietnam'],cat:'🍕 Food & Nature'},
+  {q:'What is the most consumed fruit in the world?',a:'Tomato',c:['Tomato','Banana','Apple','Mango'],cat:'🍕 Food & Nature'},
+  {q:'What is the largest land animal?',a:'African Elephant',c:['African Elephant','White Rhino','Giraffe','Hippopotamus'],cat:'🍕 Food & Nature'},
+  {q:'What country invented sushi?',a:'Japan',c:['China','Korea','Japan','Thailand'],cat:'🍕 Food & Nature'},
+  {q:'Which animal has the longest lifespan?',a:'Greenland Shark',c:['Giant Tortoise','Bowhead Whale','Greenland Shark','Ocean Quahog'],cat:'🍕 Food & Nature'},
+  {q:'What is the fastest bird in the world?',a:'Peregrine Falcon',c:['Eagle','Albatross','Swift','Peregrine Falcon'],cat:'🍕 Food & Nature'},
+  {q:'Which tree produces acorns?',a:'Oak',c:['Maple','Pine','Oak','Birch'],cat:'🍕 Food & Nature'},
+  {q:'What is the most venomous snake in the world?',a:'Inland Taipan',c:['Black Mamba','King Cobra','Inland Taipan','Russell\'s Viper'],cat:'🍕 Food & Nature'},
+  {q:'What is the deepest ocean trench on Earth?',a:'Mariana Trench',c:['Puerto Rico Trench','Mariana Trench','Tonga Trench','Philippine Trench'],cat:'🍕 Food & Nature'},
+  {q:'Which country is the origin of pizza?',a:'Italy',c:['Greece','Italy','France','USA'],cat:'🍕 Food & Nature'},
+  // ── Sports ──
+  {q:'How many players are on a standard soccer team?',a:'11',c:['9','10','11','12'],cat:'⚽ Sports'},
+  {q:'Which country has won the most FIFA World Cups?',a:'Brazil',c:['Germany','Brazil','Italy','Argentina'],cat:'⚽ Sports'},
+  {q:'How many rings are on the Olympic flag?',a:'5',c:['4','5','6','7'],cat:'⚽ Sports'},
+  {q:'How many points is a touchdown worth in American Football?',a:'6',c:['5','6','7','8'],cat:'⚽ Sports'},
+  {q:'In tennis, what score comes after deuce?',a:'Advantage',c:['Advantage','Game','Love','Break'],cat:'⚽ Sports'},
+  {q:'What is the maximum score in a single bowling game?',a:'300',c:['250','270','300','320'],cat:'⚽ Sports'},
+  {q:'How many players are on a basketball team?',a:'5',c:['4','5','6','7'],cat:'⚽ Sports'},
+  {q:'Which country invented the game of cricket?',a:'England',c:['Australia','India','England','South Africa'],cat:'⚽ Sports'},
+  // ── Language & Literature ──
+  {q:'How many letters are in the English alphabet?',a:'26',c:['24','25','26','27'],cat:'📚 Language'},
+  {q:'Who wrote "Romeo and Juliet"?',a:'William Shakespeare',c:['Charles Dickens','William Shakespeare','Jane Austen','Geoffrey Chaucer'],cat:'📚 Language'},
+  {q:'What is the most spoken language in the world by native speakers?',a:'Mandarin Chinese',c:['English','Spanish','Hindi','Mandarin Chinese'],cat:'📚 Language'},
+  {q:'How many vowels are in the English language?',a:'5',c:['4','5','6','7'],cat:'📚 Language'},
+  {q:'Who wrote "1984"?',a:'George Orwell',c:['Aldous Huxley','George Orwell','Ray Bradbury','H.G. Wells'],cat:'📚 Language'},
+  {q:'What is the longest word in the English dictionary?',a:'Pneumonoultramicroscopicsilicovolcanoconiosis',c:['Pneumonoultramicroscopicsilicovolcanoconiosis','Antidisestablishmentarianism','Supercalifragilisticexpialidocious','Honorificabilitudinitatibus'],cat:'📚 Language'},
+  {q:'Who wrote "Pride and Prejudice"?',a:'Jane Austen',c:['Charlotte Brontë','Jane Austen','Emily Brontë','Mary Shelley'],cat:'📚 Language'},
 ];
+
 
 function buildQuizShowdownEmbed(g) {
   const q = g.questions[g.qNum];
+  const cat = q.cat ? `📂 **Category:** ${q.cat}\n\n` : '';
   return new EmbedBuilder()
     .setColor('#FF6B35')
     .setTitle(`🏆 Quiz Showdown — Round ${g.qNum+1}/${g.questions.length}`)
     .setDescription(
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `${cat}` +
       `❓ **${q.q}**\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
       `🅰️  ${q.c[0]}\n🅱️  ${q.c[1]}\n🅲  ${q.c[2]}\n🅳  ${q.c[3]}\n\n` +
@@ -1436,23 +1555,100 @@ function buildTTFinalEmbed(g) {
     .setTimestamp();
 }
 const wordBombGames = {};
-const WB_PROMPTS = [
-  'IN','AN','OR','ER','ST','OU','TR','PL','GR','FR','CH','SH','TH','BL','CR',
-  'PRE','CON','OUT','ING','ENT','EST','PRO','COM','EXP','INT','UND','OVE','MIS'
+// WB_PROMPTS: each entry is { p: 'LETTERS', examples: ['word1','word2','word3'] }
+// Examples are shown as clues to help players think of valid words
+const WB_PROMPT_DATA = [
+  // 2-letter prompts (easier)
+  {p:'IN', examples:['win','mint','king','grin','skin']},
+  {p:'AN', examples:['plan','grand','tank','candy','branch']},
+  {p:'OR', examples:['word','storm','torch','glory','forest']},
+  {p:'ER', examples:['term','nerve','tiger','river','center']},
+  {p:'ST', examples:['stop','fist','dust','blast','ghost']},
+  {p:'OU', examples:['loud','cloud','found','shout','bounty']},
+  {p:'TR', examples:['trip','track','entry','extra','patrol']},
+  {p:'PL', examples:['play','reply','splash','employ','explain']},
+  {p:'GR', examples:['grow','agree','angry','group','program']},
+  {p:'FR', examples:['free','fresh','after','afraid','prefix']},
+  {p:'CH', examples:['rich','chest','beach','church','scheme']},
+  {p:'SH', examples:['ship','dish','brush','flash','shrink']},
+  {p:'TH', examples:['thin','math','cloth','tooth','growth']},
+  {p:'BL', examples:['blue','black','table','double','problem']},
+  {p:'CR', examples:['cry','crab','crash','across','create']},
+  {p:'NG', examples:['ring','song','sting','belong','kingdom']},
+  {p:'ND', examples:['hand','found','blind','second','extend']},
+  {p:'NT', examples:['hunt','hint','front','intent','content']},
+  {p:'MP', examples:['camp','limp','stamp','hamper','trumpet']},
+  {p:'LL', examples:['fall','spell','skull','follow','balloon']},
+  // 3-letter prompts (medium)
+  {p:'PRE', examples:['press','pride','prefix','spread','preview']},
+  {p:'CON', examples:['cone','icon','bacon','second','comfort']},
+  {p:'OUT', examples:['shout','doubt','about','output','outdoor']},
+  {p:'ING', examples:['ring','king','bring','spring','stirring']},
+  {p:'ENT', examples:['dent','event','scent','talent','student']},
+  {p:'EST', examples:['rest','best','quest','forest','protest']},
+  {p:'PRO', examples:['drop','proof','grown','approve','protein']},
+  {p:'COM', examples:['come','comic','become','income','compact']},
+  {p:'EXP', examples:['expel','expert','expose','expect','expand']},
+  {p:'INT', examples:['hint','joint','print','sprint','distinct']},
+  {p:'UND', examples:['fund','sound','hound','around','thunder']},
+  {p:'OVE', examples:['love','oven','over','stove','groove','proven']},
+  {p:'MIS', examples:['miss','mist','mission','dismiss','mistake']},
+  {p:'DIS', examples:['dish','disco','dismay','discuss','display']},
+  {p:'SUB', examples:['club','suburb','submit','subtle','subject']},
+  {p:'TER', examples:['term','stern','butter','matter','pattern']},
+  {p:'ATE', examples:['late','gate','plate','create','debate','donate']},
+  {p:'ION', examples:['lion','onion','action','motion','station']},
+  {p:'ISH', examples:['dish','fish','wish','polish','abolish']},
+  {p:'ARD', examples:['hard','guard','toward','reward','standard']},
+  {p:'OWN', examples:['town','crown','brown','grown','clown','drown']},
+  {p:'ACK', examples:['back','rack','black','stack','attack','hijack']},
+  {p:'OOD', examples:['food','wood','flood','blood','childhood']},
+  {p:'AST', examples:['fast','last','blast','coast','forecast']},
+  {p:'ICK', examples:['kick','thick','quick','trick','lipstick']},
+  // 4-letter prompts (hard)
+  {p:'TION', examples:['action','motion','nation','station','question']},
+  {p:'IGHT', examples:['light','night','right','tight','fright']},
+  {p:'OUND', examples:['sound','round','found','ground','background']},
+  {p:'TION', examples:['action','motion','nation','station','question']},
+  {p:'ABLE', examples:['table','cable','stable','enable','capable']},
+  {p:'NESS', examples:['stress','chess','bless','express','address']},
+  {p:'LESS', examples:['bless','unless','endless','fearless','careless']},
+  {p:'MENT', examples:['meant','cement','moment','payment','vement']},
+  {p:'WARD', examples:['award','toward','forward','awkward','reward']},
+  {p:'RANT', examples:['grant','branch','entrance','fragrant','vibrant']},
+  {p:'ARCH', examples:['march','starch','monarch','research','parchment']},
+  {p:'RUPT', examples:['rupt','abrupt','erupt','corrupt','disrupt']},
+  {p:'LUDE', examples:['rude','crude','include','exclude','prelude']},
+  {p:'ANCE', examples:['dance','chance','balance','enhance','advance']},
+  {p:'ENCE', examples:['fence','tense','sentence','evidence','sequence']},
 ];
+// Flatten for random picking, keep backward compat
+const WB_PROMPTS = WB_PROMPT_DATA.map(d => d.p);
+// Map for fast lookup of examples
+const WB_PROMPT_MAP = {};
+WB_PROMPT_DATA.forEach(d => { WB_PROMPT_MAP[d.p] = d.examples; });
 
 function buildWordBombEmbed(g) {
   const turnPlayer = g.players[g.turn % g.players.length];
+  const examples = WB_PROMPT_MAP[g.prompt] || [];
+  // Show 3 masked example words as clues: reveal first letter + length, e.g. "s___t"
+  const clueStr = examples.slice(0,3).map(w => {
+    const masked = w[0] + '_'.repeat(w.length - 2) + w[w.length - 1];
+    return `\`${masked}\``;
+  }).join('  ');
+  const diffLabel = g.prompt.length >= 4 ? '🔴 HARD' : g.prompt.length === 3 ? '🟡 MEDIUM' : '🟢 EASY';
   return new EmbedBuilder()
     .setColor('#FF4500')
     .setTitle('💣 Word Bomb — MULTIPLAYER!')
     .setDescription(
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `💣 Your word must contain: **\`${g.prompt}\`**\n` +
-      `⏱️ **${g.timeLimit} seconds** or you're eliminated!\n` +
+      `💣 Word must contain: **\`${g.prompt}\`**  ${diffLabel}\n` +
+      `⏱️ **${g.timeLimit} seconds** or you're ELIMINATED!\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
       `**It's <@${turnPlayer}>'s turn!**\n` +
-      `Type a word containing **${g.prompt}** in chat!\n\n` +
+      `Type any word containing **${g.prompt}** in chat!\n\n` +
+      `💡 **Clue words:** ${clueStr || '*none*'}\n` +
+      `*(first & last letter shown — figure out the middle!)*\n\n` +
       `**Players Alive:**\n${g.players.map((id,i)=>`${i===g.turn%g.players.length?'💣':'✅'} <@${id}>`).join('\n')}\n\n` +
       `**Round:** ${g.round} | **Used Words:** ${g.usedWords.size}`
     )
@@ -2812,7 +3008,11 @@ client.on('messageCreate', async (message) => {
     wbGame.usedWords.add(word);
     wbGame.turn++;
     wbGame.round++;
-    wbGame.prompt = WB_PROMPTS[Math.floor(Math.random()*WB_PROMPTS.length)];
+    // Pick a new prompt that hasn't been used yet (cycle through all before repeating)
+    let availablePrompts = WB_PROMPTS.filter(p => !wbGame.usedPrompts.has(p));
+    if (availablePrompts.length === 0) { wbGame.usedPrompts.clear(); availablePrompts = WB_PROMPTS; }
+    wbGame.prompt = availablePrompts[Math.floor(Math.random()*availablePrompts.length)];
+    wbGame.usedPrompts.add(wbGame.prompt);
     wbGame.timeLimit = Math.max(5, wbGame.timeLimit - (wbGame.round % 5 === 0 ? 1 : 0));
     const nextPlayer = wbGame.players[wbGame.turn % wbGame.players.length];
     wbGame.timer = setTimeout(async () => {
@@ -3945,8 +4145,9 @@ ${step}`;
     // ── QUIZ SHOWDOWN ──────────────────────────────────────────────────────────
     case 'quizshowdown': case 'qs': {
       if (quizShowdownGames[message.channel.id]) return message.reply('❌ Quiz Showdown already running here!');
-      const rounds = Math.min(parseInt(args[0]) || 10, 15);
-      const questions = [...QUIZ_SHOWDOWN_Q].sort(()=>Math.random()-0.5).slice(0,rounds);
+      const rounds = Math.min(parseInt(args[0]) || 10, 20);
+      // Shuffle the full question pool and take N unique questions
+      const questions = [...QUIZ_SHOWDOWN_Q].sort(()=>Math.random()-0.5).slice(0, rounds);
       const g = {questions, qNum:0, scores:{}, timer:null};
       quizShowdownGames[message.channel.id] = g;
       const initMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#FF6B35').setTitle('🏆 Quiz Showdown — GET READY!')
@@ -3975,7 +4176,7 @@ ${step}`;
       if (mentions.length < 1) return message.reply('❌ Mention at least 1 opponent! Usage: `!wordbomb @user1 @user2 ...`');
       const players = [message.author.id, ...mentions.map(u=>u.id)];
       const prompt = WB_PROMPTS[Math.floor(Math.random()*WB_PROMPTS.length)];
-      const g = {players, turn:0, prompt, usedWords: new Set(), round:0, timeLimit:15, timer:null};
+      const g = {players, turn:0, prompt, usedWords: new Set(), usedPrompts: new Set([prompt]), round:0, timeLimit:15, timer:null};
       wordBombGames[message.channel.id] = g;
       const initMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#FF4500').setTitle('💣 Word Bomb — MULTIPLAYER!')
         .setDescription(
@@ -4073,7 +4274,7 @@ ${step}`;
     // ── ENHANCED TRIVIA (15 rounds) ────────────────────────────────────────────
     case 'triviamarathon': case 'tm': {
       if (quizShowdownGames[message.channel.id]) return message.reply('❌ Already running!');
-      const q = [...QUIZ_SHOWDOWN_Q, ...TRIVIA.map(t=>({q:t.q, a:t.a, c:t.c}))].sort(()=>Math.random()-0.5).slice(0,15);
+      const q = [...QUIZ_SHOWDOWN_Q, ...TRIVIA.map(t=>({q:t.q, a:t.a, c:t.c, cat:'🧠 Classic'}))].sort(()=>Math.random()-0.5).slice(0,15);
       const g = {questions:q, qNum:0, scores:{}, timer:null};
       quizShowdownGames[message.channel.id] = g;
       const initMsg = await message.reply({embeds:[new EmbedBuilder().setColor('#E91E8C').setTitle('🧠 Trivia Marathon — 15 ROUNDS!')
