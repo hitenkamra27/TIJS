@@ -36,6 +36,7 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildModeration,
     GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.GuildVoiceStates,
   ],
 });
 
@@ -3559,11 +3560,12 @@ client.on('messageCreate', async (message) => {
         )
         .addFields(
           { name: '🔨  Moderation', value: '`kick` `ban` `unban` `mute` `unmute`\n`warn` `warnings` `clearwarnings`\n`slowmode` `lock` `unlock` `purge` `purgeuser`', inline: true },
-          { name: '📊  Info & Stats', value: '`userinfo` `serverinfo` `botinfo`\n`ping` `avatar` `roleinfo` `profile`', inline: true },
+          { name: '📊  Info & Stats', value: '`userinfo` `serverinfo` `botinfo` `uptime`\n`ping` `avatar` `roleinfo` `profile`', inline: true },
           { name: '\u200b', value: '\u200b', inline: false },
           { name: '😂  Fun', value: '`meme` `joke` `8ball` `ship` `fight`\n`slap` `hug` `kiss` `pat` `coinflip`\n`roll` `gay` `iq` `rizz` `aura` `simp` `drip` `sus`\n`kill` `cringe` `cuddle` `love` `meow` `shoot`\n`cry` `laugh` `horny` `marry` `divorce` `hack`', inline: true },
           { name: '🛠️  Utility & Server', value: '`say` `embed` `poll`\n`dm` `dmall` `announce`\n`ticket` `ticketset` `ticketreset`\n`welcomeset` `welcometest`', inline: true },
           { name: '\u200b', value: '\u200b', inline: false },
+          { name: '🎙️  Voice Commands *(Mod only)*', value: '`moveall <#vc>` — Move all members + bot to a VC\n`move @user <#vc>` — Move a specific member to a VC\n`voicekick @user` — Disconnect a member from VC', inline: false },
           { name: '🎭  Status *(Owner only)*', value: '`addstatus` `removestatus` `liststatus` `clearstatus`', inline: true },
           { name: '🛑  Game Control *(Mod only)*', value: '`stopgame` / `endgame` — Stop all active games', inline: true },
           { name: '\u200b', value: '\u200b', inline: false },
@@ -3833,6 +3835,181 @@ client.on('messageCreate', async (message) => {
           {name:'📦 discord.js',value:require('discord.js').version,inline:true},
           {name:'🟢 Node.js',   value:process.version,inline:true},
         ).setTimestamp()]});
+      break;
+    }
+
+    // ── !uptime ──────────────────────────────────────────────────────────────
+    case 'uptime': {
+      const up = process.uptime();
+      const d  = Math.floor(up / 86400);
+      const h  = Math.floor((up % 86400) / 3600);
+      const m  = Math.floor((up % 3600) / 60);
+      const s  = Math.floor(up % 60);
+      const parts = [];
+      if (d) parts.push(`**${d}** day${d!==1?'s':''}`);
+      if (h) parts.push(`**${h}** hour${h!==1?'s':''}`);
+      if (m) parts.push(`**${m}** minute${m!==1?'s':''}`);
+      parts.push(`**${s}** second${s!==1?'s':''}`);
+      const readyTs = client.readyAt ? `<t:${Math.floor(client.readyAt.getTime()/1000)}:R>` : 'Unknown';
+      message.reply({ embeds: [
+        new EmbedBuilder()
+          .setColor('#57F287')
+          .setTitle('⏱️ Bot Uptime')
+          .setDescription(`🟢 **Online for:** ${parts.join(', ')}\n\n📅 **Started:** ${readyTs}\n🏓 **WS Ping:** ${client.ws.ping}ms`)
+          .setFooter({ text: client.user.username })
+          .setTimestamp()
+      ]});
+      break;
+    }
+
+    // ── !moveall ─────────────────────────────────────────────────────────────
+    // Moves every member in the bot's current VC (or any VC if bot not in one)
+    // into the target VC. Bot joins target VC first so it appears as the origin.
+    // Usage: !moveall #voice-channel
+    case 'moveall': {
+      if (!message.member.permissions.has(PermissionFlagsBits.MoveMembers))
+        return missingPerm(message, 'Move Members');
+      if (!message.guild.members.me.permissions.has(PermissionFlagsBits.MoveMembers))
+        return botMissingPerm(message, 'Move Members');
+
+      // Resolve target VC from mention or first arg
+      const targetVC =
+        message.mentions.channels.first() ||
+        (args[0] ? message.guild.channels.cache.get(args[0].replace(/\D/g,'')) : null);
+
+      if (!targetVC || targetVC.type !== ChannelType.GuildVoice)
+        return message.reply('❌ Mention a valid **voice channel**. Usage: `!moveall #voice-channel`');
+
+      if (!targetVC.permissionsFor(message.guild.members.me).has(PermissionFlagsBits.Connect))
+        return botMissingPerm(message, 'Connect to that voice channel');
+
+      // Collect source VCs: all VCs that have members (excluding bots),
+      // prioritising the one the command author is in.
+      const authorVC = message.member.voice.channel;
+      let membersToMove;
+
+      if (authorVC && authorVC.id !== targetVC.id) {
+        // Move everyone from the author's current VC
+        membersToMove = [...authorVC.members.values()].filter(m => !m.user.bot);
+      } else {
+        // Move everyone from every other VC in the guild
+        membersToMove = [];
+        message.guild.channels.cache
+          .filter(c => c.type === ChannelType.GuildVoice && c.id !== targetVC.id)
+          .forEach(vc => {
+            vc.members.forEach(m => { if (!m.user.bot) membersToMove.push(m); });
+          });
+      }
+
+      if (!membersToMove.length)
+        return message.reply('❌ No members found in voice channels to move.');
+
+      // Join the target VC as the bot (visual presence)
+      const botMember = message.guild.members.me;
+      if (botMember.voice.channelId !== targetVC.id) {
+        await botMember.voice.setChannel(targetVC).catch(() => {});
+      }
+
+      let moved = 0, failed = 0;
+      for (const member of membersToMove) {
+        try {
+          await member.voice.setChannel(targetVC);
+          moved++;
+        } catch { failed++; }
+      }
+
+      message.reply({ embeds: [
+        new EmbedBuilder()
+          .setColor('#57F287')
+          .setTitle('🎙️ Move All — Done')
+          .setDescription(
+            `✅ Moved **${moved}** member${moved!==1?'s':''} to ${targetVC}` +
+            (failed ? `\n⚠️ **${failed}** could not be moved (not in VC or missing perms)` : '')
+          )
+          .setFooter({ text: `Requested by ${message.author.username}` })
+          .setTimestamp()
+      ]});
+      break;
+    }
+
+    // ── !move ────────────────────────────────────────────────────────────────
+    // Moves a specific @mentioned member to the target VC.
+    // Usage: !move @user #voice-channel
+    case 'move': {
+      if (!message.member.permissions.has(PermissionFlagsBits.MoveMembers))
+        return missingPerm(message, 'Move Members');
+      if (!message.guild.members.me.permissions.has(PermissionFlagsBits.MoveMembers))
+        return botMissingPerm(message, 'Move Members');
+
+      const target = message.mentions.members.first();
+      if (!target)
+        return message.reply('❌ Mention a member. Usage: `!move @user #voice-channel`');
+
+      if (!target.voice.channel)
+        return message.reply(`❌ **${target.user.username}** is not in any voice channel.`);
+
+      // Target VC: second mention channel, or first non-user arg
+      const targetVC =
+        message.mentions.channels.first() ||
+        (args[1] ? message.guild.channels.cache.get(args[1].replace(/\D/g,'')) : null);
+
+      if (!targetVC || targetVC.type !== ChannelType.GuildVoice)
+        return message.reply('❌ Mention a valid **voice channel** as the destination. Usage: `!move @user #voice-channel`');
+
+      if (!targetVC.permissionsFor(message.guild.members.me).has(PermissionFlagsBits.Connect))
+        return botMissingPerm(message, 'Connect to that voice channel');
+
+      try {
+        await target.voice.setChannel(targetVC);
+        message.reply({ embeds: [
+          successEmbed('🎙️ Member Moved',
+            `Moved **${target.user.username}** → ${targetVC}\n` +
+            `**From:** ${target.voice.channel?.name || 'previous VC'}`
+          )
+        ]});
+      } catch (e) {
+        message.reply({ embeds: [errorEmbed(`Could not move **${target.user.username}**: ${e.message}`)] });
+      }
+      break;
+    }
+
+    // ── !voicekick ────────────────────────────────────────────────────────────
+    // Disconnects a member from whatever VC they are in.
+    // Usage: !voicekick @user [reason]
+    case 'voicekick': case 'vckick': case 'dvc': {
+      if (!message.member.permissions.has(PermissionFlagsBits.MoveMembers))
+        return missingPerm(message, 'Move Members');
+      if (!message.guild.members.me.permissions.has(PermissionFlagsBits.MoveMembers))
+        return botMissingPerm(message, 'Move Members');
+
+      const target = message.mentions.members.first();
+      if (!target)
+        return message.reply('❌ Mention a member. Usage: `!voicekick @user [reason]`');
+
+      if (!target.voice.channel)
+        return message.reply(`❌ **${target.user.username}** is not in any voice channel.`);
+
+      const fromVC = target.voice.channel.name;
+      const reason = args.slice(1).join(' ') || 'No reason provided';
+
+      try {
+        await target.voice.disconnect(reason);
+        message.reply({ embeds: [
+          successEmbed('🔇 Voice Kicked',
+            `**${target.user.username}** has been disconnected from **${fromVC}**.\n**Reason:** ${reason}`
+          )
+        ]});
+        // Try to DM the kicked member
+        target.send({ embeds: [
+          new EmbedBuilder()
+            .setColor('#ED4245')
+            .setTitle(`🔇 Disconnected from Voice — ${message.guild.name}`)
+            .setDescription(`You were disconnected from **${fromVC}**.\n**Reason:** ${reason}\n**By:** ${message.author.username}`)
+            .setTimestamp()
+        ]}).catch(() => {});
+      } catch (e) {
+        message.reply({ embeds: [errorEmbed(`Could not disconnect **${target.user.username}**: ${e.message}`)] });
+      }
       break;
     }
 
